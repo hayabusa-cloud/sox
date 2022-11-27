@@ -1,39 +1,14 @@
 package sox
 
 import (
-	"errors"
-	"io"
 	"net"
 	"net/netip"
 	"strconv"
 )
 
-var (
-	ErrInterruptedSyscall     = errors.New("interrupted system call")
-	ErrTemporarilyUnavailable = errors.New("resource temporarily unavailable")
-	ErrInProgress             = errors.New("in progress")
-	ErrFaultParams            = errors.New("fault parameters")
-	ErrInvalidParam           = errors.New("invalid param")
-	ErrProcessFileLimit       = errors.New("process open fd limit")
-	ErrSystemFileLimit        = errors.New("system open fd limit")
-	ErrNoDevice               = errors.New("no device")
-	ErrNoAvailableMemory      = errors.New("no available kernel memory")
-	ErrNoPermission           = errors.New("operation not permiited")
-)
-
-type Socket interface {
-	FD() int
-	io.Reader
-	io.Writer
-	io.Closer
-}
-
-type Conn = net.Conn
-
-type Addr = net.Addr
+type IPAddr = net.IPAddr
 type TCPAddr = net.TCPAddr
 type UDPAddr = net.UDPAddr
-type UnixAddr = net.UnixAddr
 
 type SCTPAddr struct {
 	IP   net.IP
@@ -73,15 +48,10 @@ func SCTPAddrFromAddrPort(addr netip.AddrPort) *SCTPAddr {
 }
 
 var (
-	ResolveTCPAddr  = net.ResolveTCPAddr
-	ResolveUDPAddr  = net.ResolveUDPAddr
-	ResolveUnixAddr = net.ResolveUnixAddr
+	ResolveIPAddr  = net.ResolveIPAddr
+	ResolveTCPAddr = net.ResolveTCPAddr
+	ResolveUDPAddr = net.ResolveUDPAddr
 )
-
-type OpError = net.OpError
-type AddrError = net.AddrError
-type InvalidAddrError = net.InvalidAddrError
-type UnknownNetworkError = net.UnknownNetworkError
 
 func IP4AddressToBytes(ip net.IP) [4]byte {
 	ip4 := ip.To4()
@@ -98,4 +68,15 @@ func IP6AddressToBytes(ip net.IP) [16]byte {
 		ip[8], ip[9], ip[10], ip[11],
 		ip[12], ip[13], ip[14], ip[15],
 	}
+}
+
+func ip6ZoneID(zone string) int {
+	if zone == "" {
+		return 0
+	}
+	i, err := net.InterfaceByName(zone)
+	if err != nil {
+		panic(err)
+	}
+	return i.Index
 }

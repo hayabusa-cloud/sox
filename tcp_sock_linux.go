@@ -9,22 +9,23 @@ import (
 )
 
 type TCPSocket struct {
-	fd int
-	sa unix.Sockaddr
+	*socket
 }
 
 func newTCPSocket(sa unix.Sockaddr) (*TCPSocket, error) {
-	fd, err := 0, error(nil)
+	network, fd, err := NetworkType(-1), 0, error(nil)
 	if _, ok := sa.(*unix.SockaddrInet4); ok {
 		fd, err = newTCP4Socket()
 		if err != nil {
 			return nil, err
 		}
+		network = NetworkIPv4
 	} else if _, ok = sa.(*unix.SockaddrInet6); ok {
 		fd, err = newTCP6Socket()
 		if err != nil {
 			return nil, err
 		}
+		network = NetworkIPv6
 	} else {
 		return nil, UnknownNetworkError("unexpected family")
 	}
@@ -41,46 +42,12 @@ func newTCPSocket(sa unix.Sockaddr) (*TCPSocket, error) {
 		return nil, errFromUnixErrno(err)
 	}
 
-	so := &TCPSocket{
-		fd: fd,
-		sa: sa,
-	}
+	so := &TCPSocket{socket: newSocket(network, fd, sa)}
 	return so, nil
 }
 
-func (so *TCPSocket) FD() int {
-	return so.fd
-}
-
-func (so *TCPSocket) Read(b []byte) (n int, err error) {
-	offset := 0
-	for offset < len(b) {
-		n, err = unix.Read(so.fd, b[offset:])
-		if n > 0 {
-			offset += n
-		}
-		if err != nil && err != unix.EINTR {
-			break
-		}
-	}
-	return offset, errFromUnixErrno(err)
-}
-
-// todo: poll the completed notification from uring to know
-// it is safe to reuse a previously passed buffer or not
-func (so *TCPSocket) Write(b []byte) (n int, err error) {
-	for {
-		err = unix.Send(so.fd, b, unix.MSG_ZEROCOPY)
-		if err == unix.EINTR {
-			continue
-		}
-		break
-	}
-	return len(b), errFromUnixErrno(err)
-}
-
-func (so *TCPSocket) Close() error {
-	return nil
+func (so *TCPSocket) Protocol() UnderlyingProtocol {
+	return UnderlyingProtocolStream
 }
 
 type TCPConn struct {
@@ -101,7 +68,7 @@ func NewTCPConn(localAddr Addr, remoteSock *TCPSocket) (Conn, error) {
 	if err != nil {
 		return nil, errFromUnixErrno(err)
 	}
-	remoteAddr := TCPAddrFromAddrPort(addrPortFromSockAddr(remoteSock.sa))
+	remoteAddr := TCPAddrFromAddrPort(addrPortFromSockaddr(remoteSock.sa))
 	return &TCPConn{TCPSocket: remoteSock, laddr: tcpAddr, raddr: remoteAddr}, nil
 }
 
@@ -132,7 +99,7 @@ func (l *TCPListener) Accept() (Conn, error) {
 		return nil, err
 	}
 
-	so := &TCPSocket{fd: nfd, sa: sa}
+	so := &TCPSocket{socket: newSocket(l.network, nfd, sa)}
 	conn, err := NewTCPConn(l.Addr(), so)
 	if err != nil {
 		return nil, err
@@ -140,26 +107,22 @@ func (l *TCPListener) Accept() (Conn, error) {
 	return conn, err
 }
 
-func (l *TCPListener) Close() error {
-	return l.TCPSocket.Close()
-}
-
 func (l *TCPListener) Addr() Addr {
 	if l.laddr != nil {
 		return l.laddr
 	}
-	return TCPAddrFromAddrPort(addrPortFromSockAddr(l.sa))
+	return TCPAddrFromAddrPort(addrPortFromSockaddr(l.sa))
 }
 
 func ListenTCP4(laddr *TCPAddr) (*TCPListener, error) {
 	if laddr == nil {
 		return nil, InvalidAddrError("nil local address")
 	}
-	so, err := newTCPSocket(convertTCP4Addr(laddr))
+	so, err := newTCPSocket(tcp4AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = unix.Bind(so.fd, convertTCP4Addr(laddr))
+	err = unix.Bind(so.fd, tcp4AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, errFromUnixErrno(err)
 	}
@@ -172,15 +135,15 @@ func ListenTCP4(laddr *TCPAddr) (*TCPListener, error) {
 	return lis, nil
 }
 
-func ListenTCP6(laddr *TCPAddr, zoneID int) (*TCPListener, error) {
+func ListenTCP6(laddr *TCPAddr) (*TCPListener, error) {
 	if laddr == nil {
 		return nil, InvalidAddrError("nil local address")
 	}
-	so, err := newTCPSocket(convertTCP6Addr(laddr, zoneID))
+	so, err := newTCPSocket(tcp6AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = unix.Bind(so.fd, convertTCP6Addr(laddr, zoneID))
+	err = unix.Bind(so.fd, tcp6AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, errFromUnixErrno(err)
 	}
@@ -197,11 +160,11 @@ func DialTCP4(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "tcp4", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newTCPSocket(convertTCP4Addr(laddr))
+	so, err := newTCPSocket(tcp4AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = connectWait(so.fd, convertTCP6Addr(raddr, 64))
+	err = connectWait(so.fd, tcp4AddrToSockaddr(raddr))
 	if err != nil {
 		return nil, err
 	}
@@ -214,15 +177,15 @@ func DialTCP4(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
 	return conn, nil
 }
 
-func DialTCP6(laddr *TCPAddr, zoneID int, raddr *TCPAddr) (*TCPConn, error) {
+func DialTCP6(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "udp6", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newTCPSocket(convertTCP6Addr(laddr, zoneID))
+	so, err := newTCPSocket(tcp6AddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = connectWait(so.fd, convertTCP6Addr(raddr, 64))
+	err = connectWait(so.fd, tcp6AddrToSockaddr(raddr))
 	if err != nil {
 		return nil, err
 	}

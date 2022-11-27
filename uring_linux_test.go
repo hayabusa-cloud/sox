@@ -4,6 +4,7 @@ package sox
 
 import (
 	"bytes"
+	"context"
 	"golang.org/x/sys/unix"
 	"io"
 	"os"
@@ -46,7 +47,7 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		payload := AlignedMemBlock()
-		err = ur.read(int(f.Fd()), payload, nil)
+		err = ur.read(context.TODO(), int(f.Fd()), payload)
 		if err != nil {
 			t.Errorf("submission readv: %v", err)
 			return
@@ -108,7 +109,7 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		s := "test0123456789"
 		payload := AlignedMemBlock()
 		copy(payload, s)
-		err = ur.write(int(f.Fd()), payload, len(payload), nil)
+		err = ur.write(context.TODO(), int(f.Fd()), payload, len(payload))
 		if err != nil {
 			t.Errorf("submission write: %v", err)
 			return
@@ -186,7 +187,7 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		rb := make([]byte, len(wb))
-		err = ur.receive(so[0].fd, rb, nil)
+		err = ur.receive(context.TODO(), so[0].fd, rb)
 		if err != nil {
 			t.Errorf("submit recv: %v", err)
 			return
@@ -245,7 +246,7 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		wb := []byte("test0123456789")
-		err = ur.send(so[1].fd, wb, nil)
+		err = ur.send(context.TODO(), so[1].fd, wb)
 		if err != nil {
 			t.Errorf("submit send: %v", err)
 			return

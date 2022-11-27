@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-func TestTCPSocket_ReadWrite(t *testing.T) {
-	addr0, err := ResolveTCPAddr("tcp6", "[::1]:8088")
+func TestUnixSocket_ReadWrite(t *testing.T) {
+	addr0, err := ResolveUnixAddr("unixpacket", "@")
 	if err != nil {
 		t.Error(err)
 		return
@@ -17,11 +17,12 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 	p := []byte("test0123456789")
 	wait := make(chan struct{}, 1)
 	go func() {
-		lis, err := ListenTCP6(addr0, 64)
+		lis, err := ListenUnix(addr0)
 		if err != nil {
 			t.Error(err)
 			return
 		}
+		defer lis.Close()
 		wait <- struct{}{}
 		conn, err := lis.Accept()
 		if err != nil {
@@ -30,7 +31,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 		buf := make([]byte, len(p))
 		for {
-			r := NewMessageReader(conn, MessageOptionsTCPSocket)
+			r := NewMessageReader(conn)
 			rn, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read message: %v", err)
@@ -40,7 +41,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 				t.Errorf("read message expected %s but got %s", p, buf[:rn])
 				return
 			}
-			w := NewMessageWriter(conn, MessageOptionsTCPSocket)
+			w := NewMessageWriter(conn)
 			wn, err := w.Write(buf[:rn])
 			if err != nil {
 				t.Errorf("write message: %v", err)
@@ -54,21 +55,22 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 	}()
 
-	addr1, err := ResolveTCPAddr("tcp6", "[::1]:8089")
+	addr1, err := ResolveUnixAddr("unixpacket", "@")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	<-wait
-	conn, err := DialTCP6(addr1, 64, addr0)
+	conn, err := DialUnix(addr1, addr0)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	defer conn.Close()
 
 	for {
-		w := NewMessageWriter(conn, MessageOptionsTCPSocket)
+		w := NewMessageWriter(conn)
 		n, err := w.Write(p)
 		if err != nil {
 			t.Error(err)
@@ -80,7 +82,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 
 		buf := make([]byte, len(p))
-		r := NewMessageReader(conn, MessageOptionsTCPSocket)
+		r := NewMessageReader(conn)
 		n, err = r.Read(buf)
 		if err == ErrTemporarilyUnavailable {
 			Yield(jiffies)
@@ -92,7 +94,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 
 		if !bytes.Equal(buf, p) {
-			t.Errorf("udp read expected %s but %s", p, buf)
+			t.Errorf("unix socket read expected %s but %s", p, buf)
 			return
 		}
 		break

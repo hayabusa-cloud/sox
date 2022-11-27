@@ -3,6 +3,7 @@
 package sox
 
 import (
+	"context"
 	"golang.org/x/sys/unix"
 	"reflect"
 	"runtime"
@@ -186,44 +187,109 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	return uring, nil
 }
 
-func (ur *ioUring) nop(fd int, ctx *Ctx) error {
-	return ur.submit(IORING_OP_NOP, fd, 0, 0, 0, 0, ctx)
+func (ur *ioUring) registerPoller(p *epoll) (int, error) {
+	efd, err := unix.Eventfd(0, unix.EFD_NONBLOCK|unix.EFD_CLOEXEC)
+	if err != nil {
+		return 0, errFromUnixErrno(err)
+	}
+
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), REGISTER_EVENTFD_ASYNC, uintptr(unsafe.Pointer(&efd)), 1, 0, 0)
+	if errno != 0 {
+		return 0, errFromUnixErrno(errno)
+	}
+
+	err = p.add(efd, unix.EPOLLIN|unix.EPOLLET)
+	if err != nil {
+		return 0, err
+	}
+
+	return efd, nil
 }
 
-func (ur *ioUring) readv(fd int, iov [][]byte, ctx *Ctx) error {
+func (ur *ioUring) nop(ctx context.Context, fd int) error {
+	return ur.submit(contextWithFD(ctx, fd), IORING_OP_NOP, fd, 0, 0, 0, 0)
+}
+
+func (ur *ioUring) readv(ctx context.Context, fd int, iov [][]byte) error {
 	if iov == nil || len(iov) < 1 {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_READV
-	addr, n := ioVecFromSliceOfBytes(iov)
+	addr, n := ioVecFromBytesSlice(iov)
 
-	return ur.submit(opcode, fd, 0, addr, n, unix.MSG_WAITALL, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, unix.MSG_WAITALL)
 }
 
-func (ur *ioUring) writev(fd int, iov [][]byte, ctx *Ctx) error {
+func (ur *ioUring) writev(ctx context.Context, fd int, iov [][]byte) error {
 	if iov == nil || len(iov) < 1 {
 		return ErrInvalidParam
 	}
 
 	opcode := IORING_OP_WRITEV
-	addr, n := ioVecFromSliceOfBytes(iov)
+	addr, n := ioVecFromBytesSlice(iov)
 
-	return ur.submit(opcode, fd, 0, addr, n, 0, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, unix.MSG_ZEROCOPY)
 }
 
-func (ur *ioUring) fsync(fd int, ctx *Ctx) error {
-	return ur.submit(IORING_OP_FSYNC, fd, 0, 0, 0, 0, ctx)
+func (ur *ioUring) fsync(ctx context.Context, fd int) error {
+	return ur.submit(contextWithFD(ctx, fd), IORING_OP_FSYNC, fd, 0, 0, 0, 0)
 }
 
-func (ur *ioUring) accept(fd int, ctx *Ctx) error {
-	return ur.submit(IORING_OP_ACCEPT, fd, 0, 0, 0, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC, ctx)
+func (ur *ioUring) sendmsg(ctx context.Context, fd int, buffers [][]byte, oob []byte, to unix.Sockaddr) error {
+	saPtr, saN, err := unsafe.Pointer(uintptr(0)), 0, error(nil)
+	if to != nil {
+		saPtr, saN, err = sockaddr(to)
+		if err != nil {
+			return err
+		}
+	}
+	opcode := IORING_OP_SENDMSG
+	addr, n := ioVecFromBytesSlice(buffers)
+	msg := unix.Msghdr{
+		Name:       (*byte)(saPtr),
+		Namelen:    uint32(saN),
+		Iov:        (*unix.Iovec)(unsafe.Pointer(uintptr(addr))),
+		Iovlen:     uint64(n),
+		Control:    nil,
+		Controllen: 0,
+	}
+	if len(oob) > 0 {
+		msg.Control = &oob[0]
+		msg.Controllen = uint64(len(oob))
+	}
+
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, 1, unix.MSG_ZEROCOPY)
 }
 
-func (ur *ioUring) close(fd int, ctx *Ctx) error {
-	return ur.submit(IORING_OP_CLOSE, fd, 0, 0, 0, 0, ctx)
+func (ur *ioUring) recvmsg(ctx context.Context, fd int, buffers [][]byte, oob []byte) error {
+	from := unix.RawSockaddrAny{}
+	opcode := IORING_OP_RECVMSG
+	addr, n := ioVecFromBytesSlice(buffers)
+	msg := unix.Msghdr{
+		Name:       (*byte)(unsafe.Pointer(&from)),
+		Namelen:    uint32(unix.SizeofSockaddrAny),
+		Iov:        (*unix.Iovec)(unsafe.Pointer(uintptr(addr))),
+		Iovlen:     uint64(n),
+		Control:    nil,
+		Controllen: 0,
+	}
+	if len(oob) > 0 {
+		msg.Control = &oob[0]
+		msg.Controllen = uint64(len(oob))
+	}
+
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, 1, unix.MSG_WAITALL)
 }
 
-func (ur *ioUring) read(fd int, p []byte, ctx *Ctx) error {
+func (ur *ioUring) accept(ctx context.Context, fd int) error {
+	return ur.submit(contextWithFD(ctx, fd), IORING_OP_ACCEPT, fd, 0, 0, 0, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
+}
+
+func (ur *ioUring) close(ctx context.Context, fd int) error {
+	return ur.submit(contextWithFD(ctx, fd), IORING_OP_CLOSE, fd, 0, 0, 0, 0)
+}
+
+func (ur *ioUring) read(ctx context.Context, fd int, p []byte) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
@@ -231,10 +297,10 @@ func (ur *ioUring) read(fd int, p []byte, ctx *Ctx) error {
 	opcode := IORING_OP_READ
 	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
 
-	return ur.submit(opcode, fd, 0, addr, len(p), 0, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), 0)
 }
 
-func (ur *ioUring) write(fd int, p []byte, n int, ctx *Ctx) error {
+func (ur *ioUring) write(ctx context.Context, fd int, p []byte, n int) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
@@ -242,38 +308,38 @@ func (ur *ioUring) write(fd int, p []byte, n int, ctx *Ctx) error {
 	opcode := IORING_OP_WRITE
 	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
 
-	return ur.submit(opcode, fd, 0, addr, n, 0, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, 0)
 }
 
-func (ur *ioUring) send(fd int, p []byte, ctx *Ctx) error {
+func (ur *ioUring) send(ctx context.Context, fd int, p []byte) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_SEND
 	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
 
-	return ur.submit(opcode, fd, 0, addr, len(p), 0, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), unix.MSG_ZEROCOPY)
 }
 
-func (ur *ioUring) receive(fd int, p []byte, ctx *Ctx) error {
+func (ur *ioUring) receive(ctx context.Context, fd int, p []byte) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_RECV
 	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
 
-	return ur.submit(opcode, fd, 0, addr, len(p), unix.MSG_WAITALL, ctx)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), unix.MSG_WAITALL)
 }
 
-func (ur *ioUring) epollCtl(epfd int, op int, fd int, events uint32, ctx *Ctx) error {
+func (ur *ioUring) epollCtl(ctx context.Context, epfd int, op int, fd int, events uint32) error {
 	e := unix.EpollEvent{Events: events, Fd: int32(fd)}
 	opcode := IORING_OP_EPOLL_CTL
 	addr := uint64(uintptr(unsafe.Pointer(&e)))
 
-	return ur.submit(opcode, epfd, uint64(fd), addr, op, 0, ctx)
+	return ur.submit(ctx, opcode, epfd, uint64(fd), addr, op, 0)
 }
 
-func (ur *ioUring) submit(op uint8, fd int, off uint64, addr uint64, n int, uflags uint32, ctx *Ctx) error {
+func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
 	for !ur.sqLock.CompareAndSwap(false, true) {
 		runtime.Gosched()
 		continue
@@ -294,7 +360,7 @@ func (ur *ioUring) submit(op uint8, fd int, off uint64, addr uint64, n int, ufla
 		e.addr = addr
 		e.len = uint32(n)
 		e.uflags = uflags
-		e.userData = uint64(uintptr(unsafe.Pointer(ctx)))
+		e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
 
 		*ur.sq.kTail = (t + 1) & (*ur.sq.kRingMask)
 
@@ -385,6 +451,13 @@ type ioUringCqe struct {
 	userData uint64
 	res      int32
 	flags    uint32
+}
+
+func (cqe *ioUringCqe) Context() context.Context {
+	if cqe.userData == 0 {
+		return context.Background()
+	}
+	return *(*context.Context)(unsafe.Pointer(uintptr(cqe.userData)))
 }
 
 type ioSqRingOffsets struct {

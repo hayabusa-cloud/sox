@@ -13,12 +13,13 @@ type UnderlyingProtocol int
 
 const (
 	UnderlyingProtocolStream    UnderlyingProtocol = 1
+	UnderlyingProtocolDgram     UnderlyingProtocol = 2
 	UnderlyingProtocolSeqPacket UnderlyingProtocol = 5
 )
 
 func (t UnderlyingProtocol) PreserveBoundary() bool {
 	switch t {
-	case UnderlyingProtocolSeqPacket:
+	case UnderlyingProtocolDgram, UnderlyingProtocolSeqPacket:
 		return true
 	default:
 		return false

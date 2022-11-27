@@ -9,8 +9,7 @@ import (
 )
 
 type UnixSocket struct {
-	fd int
-	sa unix.Sockaddr
+	*socket
 }
 
 func newUnixSocket(sa unix.Sockaddr) (*UnixSocket, error) {
@@ -28,10 +27,7 @@ func newUnixSocket(sa unix.Sockaddr) (*UnixSocket, error) {
 		return nil, errFromUnixErrno(err)
 	}
 
-	so := &UnixSocket{
-		fd: fd,
-		sa: sa,
-	}
+	so := &UnixSocket{socket: newSocket(NetworkUnix, fd, sa)}
 	return so, nil
 }
 
@@ -41,33 +37,13 @@ func newUnixSocketPair() (so [2]*UnixSocket, err error) {
 		return [2]*UnixSocket{}, errFromUnixErrno(err)
 	}
 
-	so[0] = &UnixSocket{fd: fd[0], sa: &unix.SockaddrUnix{}}
-	so[1] = &UnixSocket{fd: fd[1], sa: &unix.SockaddrUnix{}}
+	so[0] = &UnixSocket{socket: newSocket(NetworkUnix, fd[0], &unix.SockaddrUnix{})}
+	so[1] = &UnixSocket{socket: newSocket(NetworkUnix, fd[1], &unix.SockaddrUnix{})}
 	return so, nil
 }
 
-func (so *UnixSocket) FD() int {
-	return so.fd
-}
-
-func (so *UnixSocket) Read(b []byte) (n int, err error) {
-	n, err = unix.Read(so.fd, b)
-	if err != nil {
-		return n, errFromUnixErrno(err)
-	}
-	return n, nil
-}
-
-func (so *UnixSocket) Write(b []byte) (n int, err error) {
-	n, err = unix.Write(so.fd, b)
-	if err != nil {
-		return n, errFromUnixErrno(err)
-	}
-	return n, nil
-}
-
-func (so *UnixSocket) Close() error {
-	return nil
+func (so *UnixSocket) Protocol() UnderlyingProtocol {
+	return UnderlyingProtocolSeqPacket
 }
 
 type UnixConn struct {
@@ -85,7 +61,7 @@ func NewUnixConn(localAddr Addr, remoteSock *UnixSocket) (Conn, error) {
 		return nil, &AddrError{Err: "unexpected address type", Addr: localAddr.String()}
 	}
 
-	remoteAddr := unixAddrFromSockAddr(remoteSock.sa, UnderlyingProtocolSeqPacket)
+	remoteAddr := unixAddrFromSockaddr(remoteSock.sa, UnderlyingProtocolSeqPacket)
 	return &UnixConn{UnixSocket: remoteSock, laddr: unixAddr, raddr: remoteAddr}, nil
 }
 
@@ -116,7 +92,7 @@ func (l *UnixListener) Accept() (Conn, error) {
 		return nil, err
 	}
 
-	so := &UnixSocket{fd: nfd, sa: sa}
+	so := &UnixSocket{socket: newSocket(NetworkUnix, nfd, sa)}
 	conn, err := NewUnixConn(l.Addr(), so)
 	if err != nil {
 		return nil, err
@@ -136,18 +112,18 @@ func (l *UnixListener) Addr() Addr {
 	if l.laddr != nil {
 		return l.laddr
 	}
-	return unixAddrFromSockAddr(l.sa, UnderlyingProtocolSeqPacket)
+	return unixAddrFromSockaddr(l.sa, UnderlyingProtocolSeqPacket)
 }
 
 func ListenUnix(laddr *UnixAddr) (*UnixListener, error) {
 	if laddr == nil {
 		return nil, InvalidAddrError("nil local address")
 	}
-	so, err := newUnixSocket(convertUnixAddr(laddr))
+	so, err := newUnixSocket(unixAddrToSockAddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = unix.Bind(so.fd, convertUnixAddr(laddr))
+	err = unix.Bind(so.fd, unixAddrToSockAddr(laddr))
 	if err != nil {
 		return nil, errFromUnixErrno(err)
 	}
@@ -163,11 +139,11 @@ func DialUnix(laddr *UnixAddr, raddr *UnixAddr) (*UnixConn, error) {
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "unix", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newUnixSocket(convertUnixAddr(laddr))
+	so, err := newUnixSocket(unixAddrToSockAddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = connectWait(so.fd, convertUnixAddr(raddr))
+	err = connectWait(so.fd, unixAddrToSockAddr(raddr))
 	if err != nil {
 		return nil, err
 	}
