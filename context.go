@@ -2,19 +2,56 @@ package sox
 
 import "context"
 
-func ContextWithUserdata(parent context.Context, userdata any) context.Context {
-	return context.WithValue(parent, "__SOX_USERDATA__", userdata)
+type userdataGetter[T any] interface {
+	getUserdata() T
 }
 
-func ContextUserdata[T any](parent context.Context) (ret T) {
-	val := parent.Value("__SOX_USERDATA__")
-	if val == nil {
-		return
+type userdataSetter[T any] interface {
+	setUserdata(data T)
+}
+
+type innerCtxGetter interface {
+	innerCtx() context.Context
+}
+
+type userdataCtx[T any] struct {
+	context.Context
+	userdata T
+}
+
+func (ctx *userdataCtx[T]) getUserdata() T {
+	return ctx.userdata
+}
+
+func (ctx *userdataCtx[T]) setUserdata(data T) {
+	ctx.userdata = data
+}
+
+func (ctx *userdataCtx[T]) innerCtx() context.Context {
+	return ctx.Context
+}
+
+func ContextWithUserdata[T any](parent context.Context, userdata T) context.Context {
+	if uc, ok := parent.(userdataSetter[T]); ok {
+		uc.setUserdata(userdata)
+		return parent
 	}
-	ok := false
-	if ret, ok = val.(T); ok {
-		return ret
+
+	return &userdataCtx[T]{Context: parent, userdata: userdata}
+}
+
+func ContextUserdata[T any](ctx context.Context) (ret T) {
+	for ctx != nil {
+		if uc, ok := ctx.(userdataGetter[T]); ok {
+			return uc.getUserdata()
+		}
+		if uc, ok := ctx.(innerCtxGetter); ok {
+			ctx = uc.innerCtx()
+		} else {
+			break
+		}
 	}
+
 	return
 }
 
@@ -31,12 +68,12 @@ type fdCtx struct {
 	fd int
 }
 
-func (ctx *fdCtx) setFD(fd int) {
-	ctx.fd = fd
-}
-
 func (ctx *fdCtx) getFD() (fd int) {
 	return ctx.fd
+}
+
+func (ctx *fdCtx) setFD(fd int) {
+	ctx.fd = fd
 }
 
 func contextWithFD(parent context.Context, fd int) context.Context {
