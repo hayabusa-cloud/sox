@@ -25,7 +25,7 @@ func newEventfd() (*eventfd, error) {
 	return &eventfd{buf: make([]byte, 8), lock: &atomic.Bool{}, fd: fd}, nil
 }
 
-func (e *eventfd) FD() int {
+func (e *eventfd) Fd() int {
 	return e.fd
 }
 

@@ -2,12 +2,15 @@
 
 package sox
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+	"time"
+	"unsafe"
+)
 
 type epoll struct {
 	fd   int
 	evts []unix.EpollEvent
-	n    int
 }
 
 func newPoller(n int) (*epoll, error) {
@@ -21,7 +24,7 @@ func newPoller(n int) (*epoll, error) {
 		return nil, errFromUnixErrno(err)
 	}
 
-	return &epoll{fd: fd, evts: evts, n: 0}, nil
+	return &epoll{fd: fd, evts: evts}, nil
 }
 
 func (ep *epoll) FD() int {
@@ -30,7 +33,8 @@ func (ep *epoll) FD() int {
 
 func (ep *epoll) add(fd int, events uint32) error {
 	evt := &unix.EpollEvent{
-		Events: events,
+		Events: events | unix.EPOLLET,
+		Fd:     int32(fd),
 	}
 	err := unix.EpollCtl(ep.fd, unix.EPOLL_CTL_ADD, fd, evt)
 	if err != nil {
@@ -49,21 +53,17 @@ func (ep *epoll) del(fd int) error {
 	return nil
 }
 
-func (ep *epoll) wait(msec int) error {
-	n, err := unix.EpollWait(ep.fd, ep.evts, msec)
+func (ep *epoll) wait(d time.Duration) (events []pollerEvent, err error) {
+	n, err := unix.EpollWait(ep.fd, ep.evts, int(d.Milliseconds()))
 	if err != nil {
-		return errFromUnixErrno(err)
+		return events, errFromUnixErrno(err)
 	}
+	ptr := (*pollerEvent)(unsafe.Pointer(&ep.evts[0]))
+	events = unsafe.Slice(ptr, n)
 
-	ep.n = n
-
-	return nil
+	return
 }
 
-func (ep *epoll) event(i int) (fd int, events uint32) {
-	if i < 0 || i >= ep.n {
-		return 0, 0
-	}
-	evt := ep.evts[i]
-	return int(evt.Fd), evt.Events
+func (ep *epoll) Close() error {
+	return unix.Close(ep.fd)
 }
