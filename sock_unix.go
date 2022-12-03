@@ -16,7 +16,7 @@ func newSocket(network NetworkType, fd int, sa unix.Sockaddr) *socket {
 	return &socket{fd: fd, sa: sa, network: network}
 }
 
-func (so *socket) FD() int {
+func (so *socket) Fd() int {
 	return so.fd
 }
 
@@ -49,7 +49,7 @@ func (so *socket) Sendmsg(buffers [][]byte, oob []byte, to Addr) (n int, err err
 	if to != nil {
 		switch so.network {
 		case NetworkUnix:
-			sa = unixAddrToSockAddr(to.(*UnixAddr))
+			sa = unixAddrToSockaddr(to.(*UnixAddr))
 		case NetworkIPv4:
 			sa = inet4AddrToSockaddr(to)
 		case NetworkIPv6:

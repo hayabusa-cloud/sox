@@ -119,11 +119,11 @@ func ListenUnix(laddr *UnixAddr) (*UnixListener, error) {
 	if laddr == nil {
 		return nil, InvalidAddrError("nil local address")
 	}
-	so, err := newUnixSocket(unixAddrToSockAddr(laddr))
+	so, err := newUnixSocket(unixAddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = unix.Bind(so.fd, unixAddrToSockAddr(laddr))
+	err = unix.Bind(so.fd, unixAddrToSockaddr(laddr))
 	if err != nil {
 		return nil, errFromUnixErrno(err)
 	}
@@ -139,11 +139,11 @@ func DialUnix(laddr *UnixAddr, raddr *UnixAddr) (*UnixConn, error) {
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "unix", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newUnixSocket(unixAddrToSockAddr(laddr))
+	so, err := newUnixSocket(unixAddrToSockaddr(laddr))
 	if err != nil {
 		return nil, err
 	}
-	err = connectWait(so.fd, unixAddrToSockAddr(raddr))
+	err = connectWait(so.fd, unixAddrToSockaddr(raddr))
 	if err != nil {
 		return nil, err
 	}
