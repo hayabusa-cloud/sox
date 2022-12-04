@@ -12,14 +12,8 @@ import (
 	"time"
 )
 
-func TestIOUring_DefaultMode(t *testing.T) {
-	t.Run("read local file", func(t *testing.T) {
-		ur, err := newIoUring(16)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
-
+func TestIOUring_BasicUsage(t *testing.T) {
+	fr := func(t *testing.T, ur *ioUring) {
 		defer os.Remove("test_f_direct.txt")
 		f, err := os.OpenFile("test_f_direct.txt", os.O_RDWR|os.O_CREATE|unix.O_DIRECT, 0660)
 		if err != nil {
@@ -59,12 +53,17 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			return
 		}
 
-		dl := time.Now().Add(time.Second)
+		dl := time.Now().Add(2 * time.Second)
 		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+			err := ur.poll(1)
+			if err != nil {
+				t.Errorf("io_ring_enter poll: %v", err)
+				return
+			}
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
-					t.Error("write file timeout")
+					t.Error("read file timeout")
 					return
 				}
 				continue
@@ -88,15 +87,9 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			t.Error("file read write wrong")
 			return
 		}
-	})
+	}
 
-	t.Run("write local file", func(t *testing.T) {
-		ur, err := newIoUring(16)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
-
+	fw := func(t *testing.T, ur *ioUring) {
 		defer os.Remove("test_f_direct.txt")
 		f, err := os.OpenFile("test_f_direct.txt", os.O_RDWR|os.O_CREATE|unix.O_DIRECT, 0660)
 		if err != nil {
@@ -120,8 +113,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			return
 		}
 
-		dl := time.Now().Add(time.Second)
+		dl := time.Now().Add(2 * time.Second)
 		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+			err := ur.poll(1)
+			if err != nil {
+				t.Errorf("io_ring_enter poll: %v", err)
+				return
+			}
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
@@ -162,15 +160,9 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			t.Error("file read write wrong")
 			return
 		}
-	})
+	}
 
-	t.Run("read unix socket", func(t *testing.T) {
-		ur, err := newIoUring(16)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
-
+	udsr := func(t *testing.T, ur *ioUring) {
 		so, err := newUnixSocketPair()
 		if err != nil {
 			t.Errorf("unix socket pair: %v", err)
@@ -197,8 +189,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			return
 		}
 
-		dl := time.Now().Add(time.Second)
+		dl := time.Now().Add(2 * time.Second)
 		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+			err := ur.poll(1)
+			if err != nil {
+				t.Errorf("io_ring_enter poll: %v", err)
+				return
+			}
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
@@ -227,15 +224,10 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			return
 		}
 		return
-	})
 
-	t.Run("write unix socket", func(t *testing.T) {
-		ur, err := newIoUring(16)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
+	}
 
+	udsw := func(t *testing.T, ur *ioUring) {
 		so, err := newUnixSocketPair()
 		if err != nil {
 			t.Errorf("unix socket pair: %v", err)
@@ -255,8 +247,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 			return
 		}
 
-		dl := time.Now().Add(time.Second)
+		dl := time.Now().Add(2 * time.Second)
 		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+			err := ur.poll(1)
+			if err != nil {
+				t.Errorf("io_ring_enter poll: %v", err)
+				return
+			}
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
@@ -296,5 +293,127 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		return
+	}
+
+	t.Run("normal mode read file", func(t *testing.T) {
+		ur, err := newIoUring(16)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fr(t, ur)
+	})
+
+	t.Run("normal mode write file", func(t *testing.T) {
+		ur, err := newIoUring(16)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fw(t, ur)
+	})
+
+	t.Run("normal mode read socket", func(t *testing.T) {
+		ur, err := newIoUring(16)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		udsr(t, ur)
+	})
+
+	t.Run("normal mode write socket", func(t *testing.T) {
+		ur, err := newIoUring(16)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		udsw(t, ur)
+	})
+
+	t.Run("io poll mode read file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringIoPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fr(t, ur)
+	})
+
+	t.Run("io poll mode write file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringIoPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fw(t, ur)
+	})
+
+	t.Run("sq poll mode read file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fr(t, ur)
+	})
+
+	t.Run("sq poll mode write file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fw(t, ur)
+	})
+
+	t.Run("sq poll mode read socket", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		udsr(t, ur)
+	})
+
+	t.Run("sq poll mode write socket", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		udsw(t, ur)
+	})
+
+	t.Run("io sq poll mode read file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringIoPollOptions, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fr(t, ur)
+	})
+
+	t.Run("io sq poll mode write file", func(t *testing.T) {
+		ur, err := newIoUring(16, ioUringIoPollOptions, ioUringSqPollOptions)
+		if err != nil {
+			t.Errorf("new io-uring: %v", err)
+			return
+		}
+
+		fw(t, ur)
 	})
 }
+
+func TestIoUring_IOOperations(t *testing.T) {}

@@ -6,7 +6,6 @@ import (
 	"context"
 	"golang.org/x/sys/unix"
 	"reflect"
-	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,49 +33,6 @@ const (
 )
 
 const (
-	IORING_OP_NOP uint8 = iota
-	IORING_OP_READV
-	IORING_OP_WRITEV
-	IORING_OP_FSYNC
-	IORING_OP_READ_FIXED
-	IORING_OP_WRITE_FIXED
-	IORING_OP_POLL_ADD
-	IORING_OP_POLL_REMOVE
-	IORING_OP_SYNC_FILE_RANGE
-	IORING_OP_SENDMSG
-	IORING_OP_RECVMSG
-	IORING_OP_TIMEOUT
-	IORING_OP_TIMEOUT_REMOVE
-	IORING_OP_ACCEPT
-	IORING_OP_ASYNC_CANCEL
-	IORING_OP_LINK_TIMEOUT
-	IORING_OP_CONNECT
-	IORING_OP_FALLOCATE
-	IORING_OP_OPENAT
-	IORING_OP_CLOSE
-	IORING_OP_FILES_UPDATE
-	IORING_OP_STATX
-	IORING_OP_READ
-	IORING_OP_WRITE
-	IORING_OP_FADVISE
-	IORING_OP_MADVISE
-	IORING_OP_SEND
-	IORING_OP_RECV
-	IORING_OP_OPENAT2
-	IORING_OP_EPOLL_CTL
-	IORING_OP_SPLICE
-	IORING_OP_PROVIDE_BUFFERS
-	IORING_OP_REMOVE_BUFFERS
-	IORING_OP_TEE
-	IORING_OP_SHUTDOWN
-	IORING_OP_RENAMEAT
-	IORING_OP_UNLINKAT
-	IORING_OP_MKDIRAT
-	IORING_OP_SYMLINKAT
-	IORING_OP_LINKAT
-)
-
-const (
 	IORING_SQ_NEED_WAKEUP = 1 << iota
 	IORING_SQ_CQ_OVERFLOW
 )
@@ -90,7 +46,32 @@ const (
 )
 
 const (
-	REGISTER_EVENTFD_ASYNC uintptr = 7
+	IORING_REGISTER_BUFFERS uintptr = iota
+	IORING_UNREGISTER_BUFFERS
+	IORING_REGISTER_FILES
+	IORING_UNREGISTER_FILES
+	IORING_REGISTER_EVENTFD
+	IORING_UNREGISTER_EVENTFD
+	IORING_REGISTER_FILES_UPDATE
+	IORING_REGISTER_EVENTFD_ASYNC
+	IORING_REGISTER_PROBE
+	IORING_REGISTER_PERSONALITY
+	IORING_UNREGISTER_PERSONALITY
+	IORING_REGISTER_RESTRICTIONS
+	IORING_REGISTER_ENABLE_RINGS
+	IORING_REGISTER_FILES2
+	IORING_REGISTER_FILES_UPDATE2
+	IORING_REGISTER_BUFFERS2
+	IORING_REGISTER_BUFFERS_UPDATE
+	IORING_REGISTER_IOWQ_AFF
+	IORING_UNREGISTER_IOWQ_AFF
+	IORING_REGISTER_IOWQ_MAX_WORKERS
+	IORING_REGISTER_RING_FDS
+	IORING_UNREGISTER_RING_FDS
+	IORING_REGISTER_PBUF_RING
+	IORING_UNREGISTER_PBUF_RING
+	IORING_REGISTER_SYNC_CANCEL
+	IORING_REGISTER_FILE_ALLOC_RANGE
 )
 
 const (
@@ -107,6 +88,7 @@ type ioUring struct {
 	sqLock atomic.Bool
 	cq     ioUringCq
 	ringFd int
+	bufs   Buffers
 }
 
 func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, error) {
@@ -136,6 +118,7 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 			ringSz: params.cqOff.cqes + uint32(unsafe.Sizeof(uint32(0)))*params.cqEntries,
 		},
 		ringFd: fd,
+		bufs:   Buffers{},
 	}
 
 	b, err := unix.Mmap(uring.ringFd, IORING_OFF_SQ_RING, int(uring.sq.ringSz), unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC, unix.MAP_SHARED|unix.MAP_POPULATE)
@@ -187,13 +170,43 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	return uring, nil
 }
 
+func (ur *ioUring) registerBuffers(n, size int) error {
+	if ur.bufs != nil && len(ur.bufs) > 0 {
+		panic("io-uring buffers already registered")
+	}
+	if n < 1 || size < 1 || n != n&(n-1) || size != size&(size-1) {
+		return ErrInvalidParam
+	}
+	ur.bufs = NewBuffers(n, size)
+	addr, n := ioVecFromBytesSlice(ur.bufs)
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_BUFFERS, addr, uintptr(n), 0, 0)
+	if errno != 0 {
+		return errFromUnixErrno(errno)
+	}
+
+	return nil
+}
+
+func (ur *ioUring) unregisterBuffers() error {
+	if ur.bufs == nil || len(ur.bufs) < 1 {
+		panic("no io-uring buffers registered")
+	}
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_UNREGISTER_BUFFERS, 0, 0, 0, 0)
+	if errno != 0 {
+		return errFromUnixErrno(errno)
+	}
+	ur.bufs = Buffers{}
+
+	return nil
+}
+
 func (ur *ioUring) registerPoller(p *epoll) (int, error) {
 	efd, err := unix.Eventfd(0, unix.EFD_NONBLOCK|unix.EFD_CLOEXEC)
 	if err != nil {
 		return 0, errFromUnixErrno(err)
 	}
 
-	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), REGISTER_EVENTFD_ASYNC, uintptr(unsafe.Pointer(&efd)), 1, 0, 0)
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_EVENTFD_ASYNC, uintptr(unsafe.Pointer(&efd)), 1, 0, 0)
 	if errno != 0 {
 		return 0, errFromUnixErrno(errno)
 	}
@@ -206,168 +219,33 @@ func (ur *ioUring) registerPoller(p *epoll) (int, error) {
 	return efd, nil
 }
 
-func (ur *ioUring) nop(ctx context.Context, fd int) error {
-	return ur.submit(contextWithFD(ctx, fd), IORING_OP_NOP, fd, 0, 0, 0, 0)
-}
-
-func (ur *ioUring) readv(ctx context.Context, fd int, iov [][]byte) error {
-	if iov == nil || len(iov) < 1 {
-		return ErrInvalidParam
-	}
-	opcode := IORING_OP_READV
-	addr, n := ioVecFromBytesSlice(iov)
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), n, unix.MSG_WAITALL)
-}
-
-func (ur *ioUring) writev(ctx context.Context, fd int, iov [][]byte) error {
-	if iov == nil || len(iov) < 1 {
-		return ErrInvalidParam
-	}
-
-	opcode := IORING_OP_WRITEV
-	addr, n := ioVecFromBytesSlice(iov)
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), n, unix.MSG_ZEROCOPY)
-}
-
-func (ur *ioUring) fsync(ctx context.Context, fd int) error {
-	return ur.submit(contextWithFD(ctx, fd), IORING_OP_FSYNC, fd, 0, 0, 0, 0)
-}
-
-func (ur *ioUring) sendmsg(ctx context.Context, fd int, buffers [][]byte, oob []byte, to unix.Sockaddr) error {
-	saPtr, saN, err := unsafe.Pointer(uintptr(0)), 0, error(nil)
-	if to != nil {
-		saPtr, saN, err = sockaddr(to)
-		if err != nil {
-			return err
-		}
-	}
-	opcode := IORING_OP_SENDMSG
-	addr, n := ioVecFromBytesSlice(buffers)
-	msg := unix.Msghdr{
-		Name:       (*byte)(saPtr),
-		Namelen:    uint32(saN),
-		Iov:        (*unix.Iovec)(unsafe.Pointer(uintptr(addr))),
-		Iovlen:     uint64(n),
-		Control:    nil,
-		Controllen: 0,
-	}
-	if len(oob) > 0 {
-		msg.Control = &oob[0]
-		msg.Controllen = uint64(len(oob))
-	}
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), 1, unix.MSG_ZEROCOPY)
-}
-
-func (ur *ioUring) recvmsg(ctx context.Context, fd int, buffers [][]byte, oob []byte) error {
-	from := unix.RawSockaddrAny{}
-	opcode := IORING_OP_RECVMSG
-	addr, n := ioVecFromBytesSlice(buffers)
-	msg := unix.Msghdr{
-		Name:       (*byte)(unsafe.Pointer(&from)),
-		Namelen:    uint32(unix.SizeofSockaddrAny),
-		Iov:        (*unix.Iovec)(unsafe.Pointer(uintptr(addr))),
-		Iovlen:     uint64(n),
-		Control:    nil,
-		Controllen: 0,
-	}
-	if len(oob) > 0 {
-		msg.Control = &oob[0]
-		msg.Controllen = uint64(len(oob))
-	}
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), 1, unix.MSG_WAITALL)
-}
-
-func (ur *ioUring) accept(ctx context.Context, fd int) error {
-	return ur.submit(contextWithFD(ctx, fd), IORING_OP_ACCEPT, fd, 0, 0, 0, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
-}
-
-func (ur *ioUring) close(ctx context.Context, fd int) error {
-	return ur.submit(contextWithFD(ctx, fd), IORING_OP_CLOSE, fd, 0, 0, 0, 0)
-}
-
-func (ur *ioUring) read(ctx context.Context, fd int, p []byte) error {
-	if p == nil || len(p) < 1 {
-		return ErrInvalidParam
-	}
-
-	opcode := IORING_OP_READ
-	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), 0)
-}
-
-func (ur *ioUring) write(ctx context.Context, fd int, p []byte, n int) error {
-	if p == nil || len(p) < 1 {
-		return ErrInvalidParam
-	}
-
-	opcode := IORING_OP_WRITE
-	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, 0)
-}
-
-func (ur *ioUring) send(ctx context.Context, fd int, p []byte) error {
-	if p == nil || len(p) < 1 {
-		return ErrInvalidParam
-	}
-	opcode := IORING_OP_SEND
-	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), unix.MSG_ZEROCOPY)
-}
-
-func (ur *ioUring) receive(ctx context.Context, fd int, p []byte) error {
-	if p == nil || len(p) < 1 {
-		return ErrInvalidParam
-	}
-	opcode := IORING_OP_RECV
-	addr := uint64(uintptr(unsafe.Pointer(&p[0])))
-
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, len(p), unix.MSG_WAITALL)
-}
-
-func (ur *ioUring) epollCtl(ctx context.Context, epfd int, op int, fd int, events uint32) error {
-	e := unix.EpollEvent{Events: events, Fd: int32(fd)}
-	opcode := IORING_OP_EPOLL_CTL
-	addr := uint64(uintptr(unsafe.Pointer(&e)))
-
-	return ur.submit(ctx, opcode, epfd, uint64(fd), addr, op, 0)
-}
-
 func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
-	for !ur.sqLock.CompareAndSwap(false, true) {
-		runtime.Gosched()
-		continue
+	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+		if !ur.sqLock.CompareAndSwap(false, true) {
+			continue
+		}
+		break
 	}
 	defer ur.sqLock.Store(false)
 
-	for {
-		h, t := *ur.sq.kHead, *ur.sq.kTail
-		if (t+1)&*ur.sq.kRingMask == h {
-			break
-		}
-
-		e := &ur.sq.sqes[t]
-		e.opcode = op
-		e.flags = IOSQE_ASYNC
-		e.fd = int32(fd)
-		e.off = off
-		e.addr = addr
-		e.len = uint32(n)
-		e.uflags = uflags
-		e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
-
-		*ur.sq.kTail = (t + 1) & (*ur.sq.kRingMask)
-
-		return nil
+	h, t := *ur.sq.kHead, *ur.sq.kTail
+	if (t+1)&*ur.sq.kRingMask == h {
+		return ErrTemporarilyUnavailable
 	}
 
-	return ErrTemporarilyUnavailable
+	e := &ur.sq.sqes[t]
+	e.opcode = op
+	e.flags = IOSQE_ASYNC
+	e.fd = int32(fd)
+	e.off = off
+	e.addr = addr
+	e.len = uint32(n)
+	e.uflags = uflags
+	e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
+
+	*ur.sq.kTail = (t + 1) & (*ur.sq.kRingMask)
+
+	return nil
 }
 
 func (ur *ioUring) enter() error {
@@ -387,8 +265,17 @@ func (ur *ioUring) enter() error {
 	return nil
 }
 
+func (ur *ioUring) poll(n int) error {
+	if ur.params.flags&IORING_SETUP_IOPOLL == 0 {
+		return nil
+	}
+	_, err := ioUringEnter(ur.ringFd, 0, uintptr(n), IORING_ENTER_GETEVENTS)
+
+	return err
+}
+
 func (ur *ioUring) wait() (*ioUringCqe, error) {
-	for {
+	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
 		h, t := atomic.LoadUint32(ur.cq.kHead), atomic.LoadUint32(ur.cq.kTail)
 		if h == t {
 			break
@@ -397,7 +284,6 @@ func (ur *ioUring) wait() (*ioUringCqe, error) {
 		e := &ur.cq.cqes[h]
 		ok := atomic.CompareAndSwapUint32(ur.cq.kHead, h, (h+1)&(*ur.cq.kRingMask))
 		if !ok {
-			runtime.Gosched()
 			continue
 		}
 
