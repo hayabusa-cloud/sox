@@ -2,7 +2,6 @@ package sox
 
 import (
 	"math"
-	"runtime"
 	"time"
 )
 
@@ -10,12 +9,12 @@ const (
 	SpinWaitLevelClient = iota
 	SpinWaitLevelBlockingIO
 	SpinWaitLevelConsume
-	SpinWaitLevelProduce
+	spinWaitLevelProduce
 	spinWaitLevelAtomic
 	spinWaitLevelNoSleep
 )
 
-type SpinWaiter struct {
+type SpinWait struct {
 	i     uint32
 	level int8
 	d     time.Duration
@@ -23,8 +22,8 @@ type SpinWaiter struct {
 	total int32
 }
 
-func NewSpinWaiter() *SpinWaiter {
-	return &SpinWaiter{
+func NewSpinWaiter() *SpinWait {
+	return &SpinWait{
 		i:     0,
 		level: SpinWaitLevelBlockingIO,
 		d:     jiffies,
@@ -33,7 +32,7 @@ func NewSpinWaiter() *SpinWaiter {
 	}
 }
 
-func (sw *SpinWaiter) SetLevel(level int) *SpinWaiter {
+func (sw *SpinWait) SetLevel(level int) *SpinWait {
 	if level < SpinWaitLevelClient {
 		sw.level = SpinWaitLevelClient
 		return sw
@@ -46,7 +45,7 @@ func (sw *SpinWaiter) SetLevel(level int) *SpinWaiter {
 	return sw
 }
 
-func (sw *SpinWaiter) SetLimit(limit int) *SpinWaiter {
+func (sw *SpinWait) SetLimit(limit int) *SpinWait {
 	if limit > math.MaxUint32-1 {
 		limit = math.MaxUint32 - 1
 	}
@@ -55,7 +54,7 @@ func (sw *SpinWaiter) SetLimit(limit int) *SpinWaiter {
 	return sw
 }
 
-func (sw *SpinWaiter) SetDuration(d time.Duration) *SpinWaiter {
+func (sw *SpinWait) SetDuration(d time.Duration) *SpinWait {
 	if d < jiffies {
 		d = jiffies
 	}
@@ -64,26 +63,38 @@ func (sw *SpinWaiter) SetDuration(d time.Duration) *SpinWaiter {
 	return sw
 }
 
-func (sw *SpinWaiter) Reset() {
+func (sw *SpinWait) Once() {
+	sw.once(sw.level)
+}
+
+func (sw *SpinWait) OnceWithLevel(level int) {
+	if level < SpinWaitLevelClient {
+		level = SpinWaitLevelClient
+	}
+	if level > spinWaitLevelNoSleep {
+		level = spinWaitLevelNoSleep
+	}
+	sw.once(int8(level))
+}
+
+func (sw *SpinWait) Reset() {
 	sw.i = 0
 	sw.total = 0
 }
 
-func (sw *SpinWaiter) Closed() bool {
+func (sw *SpinWait) Closed() bool {
 	return sw.limit > 0 && sw.i >= sw.limit
 }
 
-func (sw *SpinWaiter) Once() {
+func (sw *SpinWait) once(level int8) {
 	d := int32(0)
 	for i := sw.i; i > 0; i &= i - 1 {
 		d++
 	}
-	d = d >> sw.level
+	d = d >> level
 	if d > 0 {
 		sw.total += d
 		time.Sleep(time.Duration(d) * sw.d)
-	} else {
-		runtime.Gosched()
 	}
 	sw.i++
 }

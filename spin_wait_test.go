@@ -49,41 +49,41 @@ func TestSpinWaiter(t *testing.T) {
 
 	t.Run("level 0", func(t *testing.T) {
 		sw := NewSpinWaiter().SetLevel(SpinWaitLevelClient)
-		for i := 0; i < 1<<8; i++ {
+		for i := 0; i < 1<<4; i++ {
 			sw.Once()
 		}
-		if sw.total != 1<<10 {
-			t.Errorf("expected total wait %d but got %d", 1024, sw.total)
+		if sw.total != 1<<5 {
+			t.Errorf("expected total wait %d but got %d", 1<<5, sw.total)
 		}
 	})
 
 	t.Run("level 1", func(t *testing.T) {
 		sw := NewSpinWaiter().SetLevel(SpinWaitLevelBlockingIO)
-		for i := 0; i < 1<<9; i++ {
+		for i := 0; i < 1<<5; i++ {
 			sw.Once()
 		}
-		if sw.total != 1<<10 {
-			t.Errorf("expected total wait %d but got %d", 1<<10, sw.total)
+		if sw.total != 1<<5 {
+			t.Errorf("expected total wait %d but got %d", 1<<5, sw.total)
 		}
 	})
 
 	t.Run("level 2", func(t *testing.T) {
 		sw := NewSpinWaiter().SetLevel(SpinWaitLevelConsume)
-		for i := 0; i < 1<<10; i++ {
+		for i := 0; i < 1<<7; i++ {
 			sw.Once()
 		}
-		if sw.total <= 1<<9 || sw.total >= 1<<10 {
-			t.Errorf("expected total wait between %d and %d but got %d", 1<<9, 1<<10, sw.total)
+		if sw.total != 1<<6 {
+			t.Errorf("expected total wait %d but got %d", 1<<6, sw.total)
 		}
 	})
 
 	t.Run("level 3", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(SpinWaitLevelProduce)
-		for i := 0; i < 1<<12; i++ {
+		sw := NewSpinWaiter().SetLevel(spinWaitLevelProduce)
+		for i := 0; i < 1<<10; i++ {
 			sw.Once()
 		}
-		if sw.total <= 1<<9 || sw.total >= 1<<10 {
-			t.Errorf("expected total wait between %d and %d but got %d", 1<<9, 1<<10, sw.total)
+		if sw.total <= 1<<5 || sw.total >= 1<<6 {
+			t.Errorf("expected total wait between %d and %d but got %d", 1<<5, 1<<6, sw.total)
 		}
 	})
 
