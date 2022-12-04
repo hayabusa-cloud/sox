@@ -11,7 +11,7 @@ const (
 	SpinWaitLevelBlockingIO
 	SpinWaitLevelConsume
 	SpinWaitLevelProduce
-	SpinWaitLevelAtomic
+	spinWaitLevelAtomic
 	spinWaitLevelNoSleep
 )
 
@@ -62,6 +62,11 @@ func (sw *SpinWaiter) SetDuration(d time.Duration) *SpinWaiter {
 	sw.d = d
 
 	return sw
+}
+
+func (sw *SpinWaiter) Reset() {
+	sw.i = 0
+	sw.total = 0
 }
 
 func (sw *SpinWaiter) Closed() bool {

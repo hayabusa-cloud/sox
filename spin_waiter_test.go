@@ -88,7 +88,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 4", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(SpinWaitLevelAtomic)
+		sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic)
 		for i := 0; i < 1<<16; i++ {
 			sw.Once()
 		}
