@@ -217,7 +217,7 @@ func (ur *ioUring) readv(ctx context.Context, fd int, iov [][]byte) error {
 	opcode := IORING_OP_READV
 	addr, n := ioVecFromBytesSlice(iov)
 
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, unix.MSG_WAITALL)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), n, unix.MSG_WAITALL)
 }
 
 func (ur *ioUring) writev(ctx context.Context, fd int, iov [][]byte) error {
@@ -228,7 +228,7 @@ func (ur *ioUring) writev(ctx context.Context, fd int, iov [][]byte) error {
 	opcode := IORING_OP_WRITEV
 	addr, n := ioVecFromBytesSlice(iov)
 
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, n, unix.MSG_ZEROCOPY)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), n, unix.MSG_ZEROCOPY)
 }
 
 func (ur *ioUring) fsync(ctx context.Context, fd int) error {
@@ -258,7 +258,7 @@ func (ur *ioUring) sendmsg(ctx context.Context, fd int, buffers [][]byte, oob []
 		msg.Controllen = uint64(len(oob))
 	}
 
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, 1, unix.MSG_ZEROCOPY)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), 1, unix.MSG_ZEROCOPY)
 }
 
 func (ur *ioUring) recvmsg(ctx context.Context, fd int, buffers [][]byte, oob []byte) error {
@@ -278,7 +278,7 @@ func (ur *ioUring) recvmsg(ctx context.Context, fd int, buffers [][]byte, oob []
 		msg.Controllen = uint64(len(oob))
 	}
 
-	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, addr, 1, unix.MSG_WAITALL)
+	return ur.submit(contextWithFD(ctx, fd), opcode, fd, 0, uint64(addr), 1, unix.MSG_WAITALL)
 }
 
 func (ur *ioUring) accept(ctx context.Context, fd int) error {

@@ -41,12 +41,12 @@ func errFromUnixErrno(err error) error {
 	}
 }
 
-func ioVecFromBytesSlice(iov [][]byte) (addr uint64, n int) {
+func ioVecFromBytesSlice(iov [][]byte) (addr uintptr, n int) {
 	vec := make([]unix.Iovec, len(iov))
 	for i := 0; i < len(iov); i++ {
 		vec[i] = unix.Iovec{Base: &iov[i][0], Len: uint64(len(iov[i]))}
 	}
-	addr, n = uint64(uintptr(unsafe.Pointer(&iov))), len(iov)
+	addr, n = uintptr(unsafe.Pointer(&iov)), len(iov)
 
 	return
 }

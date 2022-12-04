@@ -5,8 +5,9 @@ for low-latency realtime communication systems
 (in progress)
 
 ### Basic Concept
-* Implement of zero copy I/O for QUIC, TCP, UDP, SCTP and Unix domain sockets  
-* Implement of event notification with low kernel-userspace context switch cost  
+* Low-copy I/O implement for QUIC, TCP, UDP, SCTP and Unix domain sockets  
+* Low kernel-userspace context switch implement for event notifications
+* Compatible with low-lock programming
 
 ### Environment Requirements
 
@@ -16,4 +17,4 @@ Kernel version must be 5.15 or later
 ### License
 ©2022 Hayabusa Cloud Co., Ltd.  
 #5F Eclat BLDG, 3-6-2 Shibuya, Shibuya City, Tokyo 150-0002, Japan  
-Released under MIT license
+Released under the MIT license

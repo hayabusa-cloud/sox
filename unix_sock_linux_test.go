@@ -69,7 +69,7 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 	}
 	defer conn.Close()
 
-	for {
+	for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 		w := NewMessageWriter(conn)
 		n, err := w.Write(p)
 		if err != nil {
@@ -85,7 +85,6 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 		r := NewMessageReader(conn)
 		n, err = r.Read(buf)
 		if err == ErrTemporarilyUnavailable {
-			Yield(jiffies)
 			continue
 		}
 		if err != nil {

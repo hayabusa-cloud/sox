@@ -60,14 +60,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		dl := time.Now().Add(time.Second)
-		for {
+		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
 					t.Error("write file timeout")
 					return
 				}
-				Yield(time.Millisecond * 50)
 				continue
 			}
 			if err != nil {
@@ -122,14 +121,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		dl := time.Now().Add(time.Second)
-		for {
+		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
 					t.Error("write file timeout")
 					return
 				}
-				Yield(time.Millisecond * 50)
 				continue
 			}
 			if err != nil {
@@ -200,14 +198,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		dl := time.Now().Add(time.Second)
-		for {
+		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
 					t.Error("read socket timeout")
 					return
 				}
-				Yield(time.Millisecond * 50)
 				continue
 			}
 			if err != nil {
@@ -259,14 +256,13 @@ func TestIOUring_DefaultMode(t *testing.T) {
 		}
 
 		dl := time.Now().Add(time.Second)
-		for {
+		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 			cqe, err := ur.wait()
 			if err == ErrTemporarilyUnavailable {
 				if time.Now().After(dl) {
 					t.Error("write socket timeout")
 					return
 				}
-				Yield(time.Millisecond * 50)
 				continue
 			}
 			if err != nil {

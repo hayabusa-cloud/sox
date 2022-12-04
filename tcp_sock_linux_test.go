@@ -67,7 +67,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		return
 	}
 
-	for {
+	for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
 		w := NewMessageWriter(conn, MessageOptionsTCPSocket)
 		n, err := w.Write(p)
 		if err != nil {
@@ -83,7 +83,6 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		r := NewMessageReader(conn, MessageOptionsTCPSocket)
 		n, err = r.Read(buf)
 		if err == ErrTemporarilyUnavailable {
-			Yield(jiffies)
 			continue
 		}
 		if err != nil {
