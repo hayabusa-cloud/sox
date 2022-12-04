@@ -1,11 +1,12 @@
 package sox
 
 import (
+	"net"
 	"os"
-	"runtime"
-	"time"
 	"unsafe"
 )
+
+type Buffers = net.Buffers
 
 // AlignedMemBlocks returns n bytes slices which
 // has length with memory page size and address
@@ -30,12 +31,19 @@ func AlignedMemBlock() []byte {
 	return AlignedMemBlocks(1)[0]
 }
 
-// Yield yields the current goroutine
-// If d > 0, Yield() also sleeps d duration
-func Yield(d time.Duration) {
-	if d > 0 {
-		time.Sleep(d)
-		return
+// NewBuffers creates and initializes a new Buffers with given n and size
+func NewBuffers(n int, size int) Buffers {
+	if n < 1 {
+		return Buffers{}
 	}
-	runtime.Gosched()
+	ret := make(Buffers, n)
+	for i := 0; i < n; i++ {
+		if size > 0 {
+			ret[i] = make([]byte, size)
+		} else {
+			ret[i] = []byte{}
+		}
+	}
+
+	return ret
 }
