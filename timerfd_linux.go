@@ -40,7 +40,7 @@ func newTimerfd(d time.Duration) (Timer, error) {
 	return &timerfd{fd: fd, buf: make([]byte, 8), tickCount: 0, startedAt: time.Now().Local(), d: d}, nil
 }
 
-func (tm *timerfd) FD() int {
+func (tm *timerfd) Fd() int {
 	return tm.fd
 }
 
