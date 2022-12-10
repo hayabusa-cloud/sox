@@ -35,6 +35,7 @@ type Socket interface {
 	io.Closer
 }
 
+type Listener = net.Listener
 type Conn = net.Conn
 type Addr = net.Addr
 type OpError = net.OpError
