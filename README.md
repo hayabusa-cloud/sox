@@ -1,8 +1,7 @@
 ## sox(WIP)
 
-asynchronous socket I/O and event notification library  
-for low-latency realtime communication systems  
-(in progress)
+Sox is an asynchronous socket I/O and event notification library  
+(work in progress)
 
 ### Basic Concept
 * Low-copy I/O implement for QUIC, TCP, UDP, SCTP and Unix domain sockets  
