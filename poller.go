@@ -1,6 +1,10 @@
 package sox
 
-import "time"
+import (
+	"io"
+	"os"
+	"time"
+)
 
 const (
 	pollerDefaultEventsNum = 1 << 10
@@ -23,4 +27,22 @@ type poller interface {
 	del(fd int) error
 	wait(d time.Duration) (events []pollerEvent, err error)
 	Close() error
+}
+
+type pollFd interface {
+	Fd() int
+}
+
+type PollReader interface {
+	pollFd
+	io.Reader
+}
+
+type PollWriter interface {
+	pollFd
+	io.Writer
+}
+
+type file interface {
+	File() (f *os.File, err error)
 }

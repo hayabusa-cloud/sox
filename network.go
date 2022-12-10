@@ -28,7 +28,7 @@ const (
 )
 
 type Socket interface {
-	FD() int
+	Fd() int
 	Protocol() UnderlyingProtocol
 	io.Reader
 	io.Writer
@@ -42,3 +42,18 @@ type OpError = net.OpError
 type AddrError = net.AddrError
 type InvalidAddrError = net.InvalidAddrError
 type UnknownNetworkError = net.UnknownNetworkError
+
+func GetFd(x any) int {
+	if x, ok := x.(pollFd); ok {
+		return x.Fd()
+	}
+	if x, ok := x.(file); ok {
+		f, err := x.File()
+		if err != nil {
+			return -1
+		}
+		return int(f.Fd())
+	}
+
+	return -1
+}
