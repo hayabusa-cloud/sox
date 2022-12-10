@@ -38,6 +38,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			return
 		}
 	})
+
 	t.Run("multiple messages on small packets", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
@@ -98,6 +99,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("multiple messages on large packets", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
@@ -184,6 +186,7 @@ func TestMessage_WriteStream(t *testing.T) {
 			return
 		}
 	})
+
 	t.Run("multiple messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
@@ -264,4 +267,97 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}
 	})
+}
+
+func BenchmarkMessage_Stream(b *testing.B) {
+	b.Run("16 bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 16)
+	})
+
+	b.Run("64 bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 64)
+	})
+
+	b.Run("256 bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 256)
+	})
+
+	b.Run("1k bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 1<<10)
+	})
+
+	b.Run("4k bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 1<<12)
+	})
+
+	b.Run("16k bytes message", func(b *testing.B) {
+		r, w := NewMessagePipe(func(options *MessageOptions) {
+			options.ReadProto = UnderlyingProtocolStream
+			options.ReadByteOrder = binary.BigEndian
+			options.WriteProto = UnderlyingProtocolStream
+			options.WriteByteOrder = binary.BigEndian
+			options.Nonblock = false
+		})
+		benchmarkMessageStream(b, r, w, 1<<14)
+	})
+}
+
+func benchmarkMessageStream(b *testing.B, r io.Reader, w io.Writer, l int) {
+	wBuf, rBuf := make([]byte, l), make([]byte, l+8)
+	go func() {
+		for i := 0; i < b.N; i++ {
+			n, err := w.Write(wBuf)
+			if err != nil {
+				b.Errorf("write %d byte(s): %v\n", n, err)
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < b.N; i++ {
+		n, err := r.Read(rBuf)
+		if err != nil {
+			b.Errorf("read %d byte(s): %v\n", n, err)
+			return
+		}
+		if n != len(wBuf) {
+			b.Error("read short bytes")
+			return
+		}
+	}
 }

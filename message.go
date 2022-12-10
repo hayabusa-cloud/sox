@@ -5,18 +5,92 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"runtime"
 	"sync/atomic"
 )
 
+// MessageOptions represents message feature options
+type MessageOptions struct {
+	ReadByteOrder  binary.ByteOrder
+	WriteByteOrder binary.ByteOrder
+	ReadProto      UnderlyingProtocol
+	WriteProto     UnderlyingProtocol
+	Nonblock       bool
+}
+
+var defaultMessageOptions = MessageOptions{
+	ReadByteOrder:  binary.BigEndian,
+	WriteByteOrder: binary.BigEndian,
+	ReadProto:      UnderlyingProtocolStream,
+	WriteProto:     UnderlyingProtocolStream,
+	Nonblock:       false,
+}
+
+// MessageOptionsTCPSocket sets feature options for TCP sockets
+var MessageOptionsTCPSocket = func(options *MessageOptions) {
+	options.ReadByteOrder = binary.BigEndian
+	options.WriteByteOrder = binary.BigEndian
+	options.ReadProto = UnderlyingProtocolStream
+	options.WriteProto = UnderlyingProtocolStream
+}
+
+// MessageOptionsSCTPSocket sets feature options for SCTP sockets
+var MessageOptionsSCTPSocket = func(options *MessageOptions) {
+	options.ReadByteOrder = binary.BigEndian
+	options.WriteByteOrder = binary.BigEndian
+	options.ReadProto = UnderlyingProtocolSeqPacket
+	options.WriteProto = UnderlyingProtocolSeqPacket
+}
+
+// MessageOptionsNetworkOrder sets byte order to big endian
+var MessageOptionsNetworkOrder = func(options *MessageOptions) {
+	options.ReadByteOrder = binary.BigEndian
+	options.WriteByteOrder = binary.BigEndian
+}
+
+// MessageOptionsNonblock sets message nonblock
+var MessageOptionsNonblock = func(options *MessageOptions) {
+	options.Nonblock = true
+}
+
+// NewMessageReader creates and returns a new io.Reader to read messages
+func NewMessageReader(reader io.Reader, opts ...func(options *MessageOptions)) io.Reader {
+	return &messageReader{message: newMessage(reader, nil, opts...)}
+}
+
+// NewMessageWriter creates and returns a new io.Writer to write messages
+func NewMessageWriter(writer io.Writer, opts ...func(options *MessageOptions)) io.Writer {
+	return &messageWriter{message: newMessage(nil, writer, opts...)}
+}
+
+// NewMessageReadWriter creates and returns a new io.ReadWriter to read and write messages
+func NewMessageReadWriter(reader io.Reader, writer io.Writer, opts ...func(options *MessageOptions)) io.ReadWriter {
+	return &messageReadWriter{
+		messageReader: &messageReader{newMessage(reader, nil, opts...)},
+		messageWriter: &messageWriter{newMessage(nil, writer, opts...)},
+	}
+}
+
+// NewMessagePipe creates and returns a synchronous in-memory message pipe
+func NewMessagePipe(opts ...func(options *MessageOptions)) (reader io.Reader, writer io.Writer) {
+	r, w := io.Pipe()
+	pipe := NewMessageReadWriter(r, w, opts...)
+	reader, writer = pipe, pipe
+	return
+}
+
+// UnderlyingProtocol represents transmission protocol features
 type UnderlyingProtocol int
 
 const (
-	UnderlyingProtocolStream    UnderlyingProtocol = 1
-	UnderlyingProtocolDgram     UnderlyingProtocol = 2
+	// UnderlyingProtocolStream means the underlying protocol works like stream
+	UnderlyingProtocolStream UnderlyingProtocol = 1
+	// UnderlyingProtocolDgram means the underlying protocol works like datagram
+	UnderlyingProtocolDgram UnderlyingProtocol = 2
+	// UnderlyingProtocolSeqPacket means the underlying protocol works like sequenced packet
 	UnderlyingProtocolSeqPacket UnderlyingProtocol = 5
 )
 
+// PreserveBoundary returns true if the underlying protocol preserves message boundaries
 func (t UnderlyingProtocol) PreserveBoundary() bool {
 	switch t {
 	case UnderlyingProtocolDgram, UnderlyingProtocolSeqPacket:
@@ -27,11 +101,16 @@ func (t UnderlyingProtocol) PreserveBoundary() bool {
 }
 
 var (
+	// ErrMsgInvalidArguments will be returned when got invalid parameter
 	ErrMsgInvalidArguments = errors.New("message invalid argument")
-	ErrMsgInvalidRead      = errors.New("message invalid read result")
-	ErrMsgInvalidWrite     = errors.New("message invalid write result")
-	ErrMsgTooLong          = errors.New("message too long")
-	ErrMsgClosed           = errors.New("message closed")
+	// ErrMsgInvalidRead will be returned when read operation invalid
+	ErrMsgInvalidRead = errors.New("message invalid read result")
+	// ErrMsgInvalidWrite will be returned when write operation invalid
+	ErrMsgInvalidWrite = errors.New("message invalid write result")
+	// ErrMsgTooLong will be returned when try to read or write a message which is too long
+	ErrMsgTooLong = errors.New("message too long")
+	// ErrMsgClosed will be returned when try to read or write on a closed reader or writer
+	ErrMsgClosed = errors.New("message closed")
 )
 
 const (
@@ -66,13 +145,13 @@ func (msg *message) close() error {
 	if msg.done {
 		return nil
 	}
-	for {
+	for sw := NewSpinWaiter(); !sw.Closed(); {
 		status := msg.status.Load()
 		if (status & (messageStatusRead | messageStatusWrite)) == (messageStatusRead | messageStatusWrite) {
 			if msg.nonblock {
 				return ErrTemporarilyUnavailable
 			}
-			runtime.Gosched()
+			sw.Once()
 			continue
 		}
 
@@ -80,7 +159,10 @@ func (msg *message) close() error {
 			msg.done = true
 			return nil
 		}
+		sw.OnceWithLevel(spinWaitLevelAtomic)
 	}
+
+	return nil
 }
 
 func (msg *message) setReadWriter(rw io.ReadWriter, order binary.ByteOrder, typ UnderlyingProtocol) {
@@ -203,25 +285,28 @@ func (msg *message) enterRead() (oldStatus uint32, ok bool) {
 	if msg.wr == nil {
 		return 0, true
 	}
-	for {
+	for sw := NewSpinWaiter(); !sw.Closed(); {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusRead) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusRead) {
 				return oldStatus, true
 			}
+			sw.OnceWithLevel(spinWaitLevelAtomic)
 			continue
 		} else if !msg.nonblock {
-			runtime.Gosched()
+			sw.Once()
 			continue
 		}
 		return oldStatus, false
 	}
+
+	return oldStatus, false
 }
 func (msg *message) exitRead() (oldStatus uint32) {
 	if msg.wr == nil {
 		return 0
 	}
-	for {
+	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusRead) {
 			break
@@ -335,25 +420,28 @@ func (msg *message) enterWrite() (oldStatus uint32, ok bool) {
 	if msg.rd == nil {
 		return 0, true
 	}
-	for {
+	for sw := NewSpinWaiter(); !sw.Closed(); {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusWrite) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusWrite) {
 				return oldStatus, true
 			}
+			sw.OnceWithLevel(spinWaitLevelAtomic)
 			continue
 		} else if !msg.nonblock {
-			runtime.Gosched()
+			sw.Once()
 			continue
 		}
 		return oldStatus, false
 	}
+
+	return oldStatus, false
 }
 func (msg *message) exitWrite() (oldStatus uint32) {
 	if msg.rd == nil {
 		return 0
 	}
-	for {
+	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusWrite) {
 			break
@@ -385,6 +473,7 @@ func (msg *message) writeTo(writer io.Writer) (n int64, err error) {
 func (msg *message) payloadLen(header []byte) int {
 	return int(msg.rbo.Uint16(header))
 }
+
 func (msg *message) putPayloadLen(header []byte, length int) {
 	msg.wbo.PutUint16(header, uint16(length))
 }
@@ -393,48 +482,7 @@ func (msg *message) reset() {
 	msg.offset = 0
 }
 
-type MessageOptions struct {
-	ReadByteOrder  binary.ByteOrder
-	WriteByteOrder binary.ByteOrder
-	ReadProto      UnderlyingProtocol
-	WriteProto     UnderlyingProtocol
-	Nonblock       bool
-}
-
-var defaultMessageOptions = MessageOptions{
-	ReadByteOrder:  binary.BigEndian,
-	WriteByteOrder: binary.BigEndian,
-	ReadProto:      UnderlyingProtocolStream,
-	WriteProto:     UnderlyingProtocolStream,
-	Nonblock:       false,
-}
-
-type MessageOptionsFunc func(options *MessageOptions)
-
-var MessageOptionsTCPSocket = func(options *MessageOptions) {
-	options.ReadByteOrder = binary.BigEndian
-	options.WriteByteOrder = binary.BigEndian
-	options.ReadProto = UnderlyingProtocolStream
-	options.WriteProto = UnderlyingProtocolStream
-}
-
-var MessageOptionsSCTPSocket = func(options *MessageOptions) {
-	options.ReadByteOrder = binary.BigEndian
-	options.WriteByteOrder = binary.BigEndian
-	options.ReadProto = UnderlyingProtocolSeqPacket
-	options.WriteProto = UnderlyingProtocolSeqPacket
-}
-
-var MessageOptionsNetworkOrder = func(options *MessageOptions) {
-	options.ReadByteOrder = binary.BigEndian
-	options.WriteByteOrder = binary.BigEndian
-}
-
-var MessageOptionsNonblock = func(options *MessageOptions) {
-	options.Nonblock = true
-}
-
-func newMessage(reader io.Reader, writer io.Writer, opts ...MessageOptionsFunc) *message {
+func newMessage(reader io.Reader, writer io.Writer, opts ...func(options *MessageOptions)) *message {
 	opt := defaultMessageOptions
 	for _, fn := range opts {
 		fn(&opt)
@@ -470,10 +518,6 @@ func (msg *messageReader) WriteTo(writer io.Writer) (n int64, err error) {
 	return msg.writeTo(writer)
 }
 
-func NewMessageReader(reader io.Reader, opts ...MessageOptionsFunc) io.Reader {
-	return &messageReader{message: newMessage(reader, nil, opts...)}
-}
-
 type messageWriter struct {
 	*message
 }
@@ -486,25 +530,7 @@ func (msg *messageWriter) ReadFrom(reader io.Reader) (n int64, err error) {
 	return msg.readFrom(reader)
 }
 
-func NewMessageWriter(writer io.Writer, opts ...MessageOptionsFunc) io.Writer {
-	return &messageWriter{message: newMessage(nil, writer, opts...)}
-}
-
 type messageReadWriter struct {
 	*messageReader
 	*messageWriter
-}
-
-func NewMessageReadWriter(reader io.Reader, writer io.Writer, opts ...MessageOptionsFunc) io.ReadWriter {
-	return &messageReadWriter{
-		messageReader: &messageReader{newMessage(reader, nil, opts...)},
-		messageWriter: &messageWriter{newMessage(nil, writer, opts...)},
-	}
-}
-
-func NewMessagePipe(opts ...MessageOptionsFunc) (reader io.Reader, writer io.Writer) {
-	r, w := io.Pipe()
-	pipe := NewMessageReadWriter(r, w, opts...)
-	reader, writer = pipe, pipe
-	return
 }
