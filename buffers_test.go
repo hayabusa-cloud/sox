@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-func TestAlignedBlocks(t *testing.T) {
+func TestAlignedMemBlocks(t *testing.T) {
 	t.Run("single", func(t *testing.T) {
 		b := AlignedMemBlocks(1)[0]
 		if len(b) != os.Getpagesize() {

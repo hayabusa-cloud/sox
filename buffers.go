@@ -6,6 +6,7 @@ import (
 	"unsafe"
 )
 
+// Buffers is alias of net.Buffers
 type Buffers = net.Buffers
 
 // AlignedMemBlocks returns n bytes slices which
