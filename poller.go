@@ -3,7 +3,7 @@ package sox
 import "time"
 
 const (
-	pollerDefaultEventsNum = 1 << 8
+	pollerDefaultEventsNum = 1 << 10
 )
 
 const (
