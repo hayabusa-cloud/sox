@@ -145,7 +145,7 @@ func (msg *message) close() error {
 	if msg.done {
 		return nil
 	}
-	for sw := NewSpinWaiter(); !sw.Closed(); {
+	for sw := NewSpinWait(); !sw.Closed(); {
 		status := msg.status.Load()
 		if (status & (messageStatusRead | messageStatusWrite)) == (messageStatusRead | messageStatusWrite) {
 			if msg.nonblock {
@@ -285,7 +285,7 @@ func (msg *message) enterRead() (oldStatus uint32, ok bool) {
 	if msg.wr == nil {
 		return 0, true
 	}
-	for sw := NewSpinWaiter(); !sw.Closed(); {
+	for sw := NewSpinWait(); !sw.Closed(); {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusRead) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusRead) {
@@ -306,7 +306,7 @@ func (msg *message) exitRead() (oldStatus uint32) {
 	if msg.wr == nil {
 		return 0
 	}
-	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusRead) {
 			break
@@ -420,7 +420,7 @@ func (msg *message) enterWrite() (oldStatus uint32, ok bool) {
 	if msg.rd == nil {
 		return 0, true
 	}
-	for sw := NewSpinWaiter(); !sw.Closed(); {
+	for sw := NewSpinWait(); !sw.Closed(); {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusWrite) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusWrite) {
@@ -441,7 +441,7 @@ func (msg *message) exitWrite() (oldStatus uint32) {
 	if msg.rd == nil {
 		return 0
 	}
-	for sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusWrite) {
 			break

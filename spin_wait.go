@@ -22,7 +22,7 @@ type SpinWait struct {
 	total int32
 }
 
-func NewSpinWaiter() *SpinWait {
+func NewSpinWait() *SpinWait {
 	return &SpinWait{
 		i:     0,
 		level: SpinWaitLevelBlockingIO,

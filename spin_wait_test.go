@@ -30,7 +30,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("common usage", func(t *testing.T) {
 		x := atomic.Int32{}
 		go fn(&x)
-		for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
 			val := x.Load()
 			//  some actions
 			runtime.Gosched()
@@ -48,7 +48,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 0", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(SpinWaitLevelClient)
+		sw := NewSpinWait().SetLevel(SpinWaitLevelClient)
 		for i := 0; i < 1<<4; i++ {
 			sw.Once()
 		}
@@ -58,7 +58,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 1", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(SpinWaitLevelBlockingIO)
+		sw := NewSpinWait().SetLevel(SpinWaitLevelBlockingIO)
 		for i := 0; i < 1<<5; i++ {
 			sw.Once()
 		}
@@ -68,7 +68,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 2", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(SpinWaitLevelConsume)
+		sw := NewSpinWait().SetLevel(SpinWaitLevelConsume)
 		for i := 0; i < 1<<7; i++ {
 			sw.Once()
 		}
@@ -78,7 +78,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 3", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(spinWaitLevelProduce)
+		sw := NewSpinWait().SetLevel(spinWaitLevelProduce)
 		for i := 0; i < 1<<10; i++ {
 			sw.Once()
 		}
@@ -88,7 +88,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 4", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLevel(spinWaitLevelAtomic)
+		sw := NewSpinWait().SetLevel(spinWaitLevelAtomic)
 		for i := 0; i < 1<<16; i++ {
 			sw.Once()
 		}
@@ -98,7 +98,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("timeout", func(t *testing.T) {
-		sw := NewSpinWaiter().SetLimit(128)
+		sw := NewSpinWait().SetLimit(128)
 		for ; !sw.Closed(); sw.Once() {
 		}
 		if sw.i != 128 {

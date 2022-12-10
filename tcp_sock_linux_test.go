@@ -67,7 +67,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		return
 	}
 
-	for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
 		w := NewMessageWriter(conn, MessageOptionsTCPSocket)
 		n, err := w.Write(p)
 		if err != nil {

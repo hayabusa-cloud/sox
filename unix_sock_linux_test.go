@@ -69,7 +69,7 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 	}
 	defer conn.Close()
 
-	for sw := NewSpinWaiter(); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
 		w := NewMessageWriter(conn)
 		n, err := w.Write(p)
 		if err != nil {

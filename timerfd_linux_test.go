@@ -32,9 +32,7 @@ func TestTimer_Tick(t *testing.T) {
 	t.Run("200msec", func(t *testing.T) {
 		fn(200*time.Millisecond, t)
 	})
-	t.Run("1sec", func(t *testing.T) {
-		fn(time.Second, t)
-	})
+
 	t.Run("1sec100msec", func(t *testing.T) {
 		fn(1*time.Second+100*time.Millisecond, t)
 	})
