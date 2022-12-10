@@ -126,10 +126,16 @@ func TestEpoll(t *testing.T) {
 		t.Errorf("event fd write: %v", err)
 		return
 	}
-	events, err = ep.wait(d)
-	if err != nil {
-		t.Errorf("epoll wait: %v", err)
-		return
+	for {
+		events, err = ep.wait(d)
+		if err == ErrInterruptedSyscall {
+			continue
+		}
+		if err != nil {
+			t.Errorf("epoll wait: %v", err)
+			return
+		}
+		break
 	}
 	if len(events) != 0 {
 		t.Errorf("epoll wait expected event num=%d but got %v", 0, events)
