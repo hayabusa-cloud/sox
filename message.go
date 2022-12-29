@@ -14,11 +14,19 @@ import (
 
 // MessageOptions represents message feature options
 type MessageOptions struct {
-	ReadByteOrder  binary.ByteOrder
+	// ReadByteOrder sets which byte order will be used when reading data
+	ReadByteOrder binary.ByteOrder
+	// WriteByteOrder sets which byte order will be used when writing data
 	WriteByteOrder binary.ByteOrder
-	ReadProto      UnderlyingProtocol
-	WriteProto     UnderlyingProtocol
-	Nonblock       bool
+	// ReadProto sets which protocol type will be used when reading data
+	ReadProto UnderlyingProtocol
+	// WriteProto sets which protocol type will be used when writing data
+	WriteProto UnderlyingProtocol
+	// ReadLimit is the maximum message payload data size
+	// A ReadLimit of zero indicates that there is no limit
+	ReadLimit int
+	// Nonblock if the nonblock flag is true, Message will not block on I/O
+	Nonblock bool
 }
 
 var defaultMessageOptions = MessageOptions{
@@ -104,6 +112,32 @@ func (t UnderlyingProtocol) PreserveBoundary() bool {
 	}
 }
 
+//
+// We defined an original message protocol format as follows:
+//
+// 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+// +--------------+-------------------------------+---------------+
+// |Payload Length|    Extended Payload Length    | Ext. Length   |
+// |     (8)      |            (16/56)            | continued ... |
+// |              | (if payload length==254/255)  | if len == 255 |
+// +--------------+ - - - - - - - - - - - - - - - - - - - - - - - +
+// |   Extended payload length continued, if payload len == 255   |
+// | - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+
+// |                        Payload Data                          |
+// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+
+// :                 Payload Data continued ...                   :
+// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+
+// |                 Payload Data continued ...                   |
+// +--------------------------------------------------------------+
+//
+// Payload length: 8 bits, 8+16 bits, or 8+56 bits
+//   The length of the "Payload data", in bytes: if 0-253, that is the
+//   payload length. If 254, the following 2 bytes interpreted as a
+//   2-bytes unsigned integer are the payload length. If 255, the
+//   following 7 bytes interpreted as a 56-bits unsigned integer are
+//   the payload length. Multibyte length quantities are expressed in
+//   network byte order. oad Length to encode the length.
+
 var (
 	// ErrMsgInvalidArguments will be returned when got invalid parameter
 	ErrMsgInvalidArguments = errors.New("message invalid argument")
@@ -118,8 +152,10 @@ var (
 )
 
 const (
-	messageHeaderLength     = 2
-	messagePayloadMaxLength = 1 << (messageHeaderLength << 3)
+	messageHeaderLength           = 1
+	messagePayloadMaxLength8Bits  = 1<<8 - 3
+	messagePayloadMaxLength16Bits = 1<<16 - 1
+	messagePayloadMaxLength56Bits = 1<<56 - 1
 
 	messageStatusRead   uint32 = 4
 	messageStatusWrite  uint32 = 2
@@ -135,12 +171,13 @@ type message struct {
 	wpr UnderlyingProtocol
 
 	status atomic.Uint32
-	header []byte
-	length int
-	offset int
+	header [8]byte
+	length int64
+	offset int64
 	count  atomic.Int32
 
-	nonblock bool
+	readLimit int64
+	nonblock  bool
 
 	done bool
 }
@@ -204,13 +241,9 @@ func (msg *message) readStream(p []byte) (n int, err error) {
 		}
 	}()
 
-	if msg.header == nil || len(msg.header) < messageHeaderLength {
-		return 0, ErrMsgInvalidArguments
-	}
-
 	for rn := 0; msg.offset < messageHeaderLength; {
 		rn, err = msg.readOnce(msg.header[msg.offset:messageHeaderLength])
-		msg.offset += rn
+		msg.offset += int64(rn)
 		if err != nil && err != io.EOF && (err != ErrTemporarilyUnavailable || msg.nonblock) {
 			return
 		}
@@ -221,21 +254,74 @@ func (msg *message) readStream(p []byte) (n int, err error) {
 			break
 		}
 	}
-	if msg.offset == messageHeaderLength {
-		msg.length = msg.payloadLen(msg.header)
+	exLengthBytes := int64(0)
+	if msg.offset >= messageHeaderLength {
+		if msg.readLimit > 0 && msg.length > msg.readLimit {
+			return 0, ErrMsgTooLong
+		}
+		if msg.header[0] == messagePayloadMaxLength8Bits+1 {
+			exLengthBytes = 2
+		} else if msg.header[0] == messagePayloadMaxLength8Bits+2 {
+			exLengthBytes = 7
+		}
 	}
-	if msg.length > len(p) {
+	if len(msg.header) < int(messageHeaderLength+exLengthBytes) {
 		return 0, io.ErrShortBuffer
 	}
-	for rn := 0; msg.offset < messageHeaderLength+msg.length; {
-		rn, err = msg.readOnce(p[msg.offset-messageHeaderLength : msg.length])
-		msg.offset += rn
+	if msg.offset < messageHeaderLength+exLengthBytes {
+		for rn := 0; msg.offset < messageHeaderLength+exLengthBytes; {
+			rn, err = msg.readOnce(msg.header[messageHeaderLength : messageHeaderLength+exLengthBytes])
+			msg.offset += int64(rn)
+			if err != nil && err != io.EOF && (err != ErrTemporarilyUnavailable || msg.nonblock) {
+				return
+			}
+			if err == io.EOF {
+				if msg.offset < messageHeaderLength+exLengthBytes {
+					return 0, io.ErrUnexpectedEOF
+				}
+				break
+			}
+		}
+	}
+	if msg.offset == messageHeaderLength+exLengthBytes {
+		if exLengthBytes == 2 {
+			msg.length = int64(msg.rbo.Uint16(msg.header[messageHeaderLength : messageHeaderLength+exLengthBytes]))
+		} else if exLengthBytes == 7 {
+			u64 := msg.rbo.Uint64(msg.header[:])
+			if msg.rbo == binary.LittleEndian {
+				msg.length = int64(u64 >> 8)
+			} else if msg.rbo == binary.BigEndian {
+				msg.length = int64(u64 & messagePayloadMaxLength56Bits)
+			}
+		} else {
+			msg.length = int64(msg.header[0])
+		}
+	}
+	if msg.readLimit > 0 && msg.length > msg.readLimit {
+		return 0, ErrMsgTooLong
+	}
+	// we assume that generally a 4K buffer p []byte will be given
+	if msg.length > int64(len(p)) {
+		if msg.length < (1 << 16) {
+			// TODO: acquire a 64k buffer from pool
+		} else if msg.length < (1 << 20) {
+			// TODO: acquire a 1m buffer from pool
+		} else if msg.length < (1 << 24) {
+			// TODO: acquire a 16m buffer from pool
+		} else {
+			// TODO: non-buffered work mode
+		}
+		return 0, io.ErrShortBuffer
+	}
+	for rn := 0; msg.offset < messageHeaderLength+exLengthBytes+msg.length; {
+		rn, err = msg.readOnce(p[msg.offset-messageHeaderLength-exLengthBytes : msg.length])
+		msg.offset += int64(rn)
 		n += rn
 		if err != nil && err != io.EOF && (err != ErrTemporarilyUnavailable || msg.nonblock) {
 			return
 		}
 		if err == io.EOF {
-			if msg.offset < messageHeaderLength+msg.length {
+			if msg.offset < messageHeaderLength+exLengthBytes+msg.length {
 				return n, io.ErrUnexpectedEOF
 			}
 			break
@@ -257,9 +343,9 @@ func (msg *message) readPacket(p []byte) (n int, err error) {
 			continue
 		}
 		if err != nil && err != io.EOF {
-			return 0, err
+			return
 		}
-		if n > messagePayloadMaxLength {
+		if n > messagePayloadMaxLength56Bits {
 			return n, ErrMsgTooLong
 		} else if n == len(p) {
 			break
@@ -339,30 +425,49 @@ func (msg *message) writeStream(p []byte) (n int, err error) {
 		}
 	}()
 
-	if msg.header == nil || len(msg.header) < messageHeaderLength {
-		return 0, ErrMsgInvalidArguments
-	}
-	if len(p) > messagePayloadMaxLength {
+	if msg.length > messagePayloadMaxLength56Bits {
 		return 0, ErrMsgTooLong
 	}
 
 	if msg.offset == 0 {
-		msg.length = len(p)
-		msg.putPayloadLen(msg.header, msg.length)
+		msg.length = int64(len(p))
 	}
-	for wn := 0; msg.offset < messageHeaderLength; {
-		wn, err = msg.writeOnce(msg.header[msg.offset:messageHeaderLength])
-		msg.offset += wn
+	exLengthBytes := int64(0)
+	if msg.length <= messagePayloadMaxLength8Bits {
+		exLengthBytes = 0
+	} else if msg.length <= messagePayloadMaxLength16Bits {
+		exLengthBytes = 2
+	} else {
+		exLengthBytes = 7
+	}
+	if msg.offset == 0 {
+		if msg.length <= messagePayloadMaxLength8Bits {
+			msg.header[0] = byte(msg.length)
+		} else if msg.length <= messagePayloadMaxLength16Bits {
+			msg.header[0] = messagePayloadMaxLength8Bits + 1
+			msg.wbo.PutUint16(msg.header[messageHeaderLength:messageHeaderLength+exLengthBytes], uint16(msg.length))
+		} else {
+			if msg.wbo == binary.LittleEndian {
+				msg.wbo.PutUint64(msg.header[:], uint64(msg.length)<<8)
+			} else {
+				msg.wbo.PutUint64(msg.header[:], uint64(msg.length&messagePayloadMaxLength56Bits))
+			}
+			msg.header[0] = messagePayloadMaxLength8Bits + 2
+		}
+	}
+	for wn := 0; msg.offset < messageHeaderLength+exLengthBytes; {
+		wn, err = msg.writeOnce(msg.header[msg.offset : messageHeaderLength+exLengthBytes])
+		msg.offset += int64(wn)
 		if err != nil && (err != ErrTemporarilyUnavailable || msg.nonblock) {
 			return
 		}
 	}
-	if msg.length != msg.offset-messageHeaderLength+len(p) {
+	if msg.length != msg.offset-messageHeaderLength-exLengthBytes+int64(len(p)) {
 		return 0, io.ErrShortWrite
 	}
-	for wn := 0; msg.offset < messageHeaderLength+msg.length; {
-		wn, err = msg.writeOnce(p[:msg.length-(msg.offset-messageHeaderLength)])
-		msg.offset += wn
+	for wn := 0; msg.offset < messageHeaderLength+exLengthBytes+msg.length; {
+		wn, err = msg.writeOnce(p[:msg.length-(msg.offset-messageHeaderLength-exLengthBytes)])
+		msg.offset += int64(wn)
 		n += wn
 		if err != nil && (err != ErrTemporarilyUnavailable || msg.nonblock) {
 			break
@@ -379,7 +484,7 @@ func (msg *message) writeStream(p []byte) (n int, err error) {
 }
 func (msg *message) writePacket(p []byte) (n int, err error) {
 	defer msg.exitWrite()
-	if len(p) > messagePayloadMaxLength {
+	if len(p) > messagePayloadMaxLength56Bits {
 		return 0, bufio.ErrTooLong
 	}
 	for {
@@ -474,14 +579,6 @@ func (msg *message) writeTo(writer io.Writer) (n int64, err error) {
 	return io.Copy(writer, msg.rd)
 }
 
-func (msg *message) payloadLen(header []byte) int {
-	return int(msg.rbo.Uint16(header))
-}
-
-func (msg *message) putPayloadLen(header []byte, length int) {
-	msg.wbo.PutUint16(header, uint16(length))
-}
-
 func (msg *message) reset() {
 	msg.offset = 0
 }
@@ -493,13 +590,14 @@ func newMessage(reader io.Reader, writer io.Writer, opts ...func(options *Messag
 	}
 
 	m := &message{
-		status:   atomic.Uint32{},
-		header:   make([]byte, 2),
-		length:   0,
-		offset:   0,
-		count:    atomic.Int32{},
-		nonblock: opt.Nonblock,
-		done:     false,
+		status:    atomic.Uint32{},
+		header:    [8]byte{},
+		length:    0,
+		offset:    0,
+		count:     atomic.Int32{},
+		readLimit: int64(opt.ReadLimit),
+		nonblock:  opt.Nonblock,
+		done:      false,
 	}
 	if reader != nil {
 		m.setReader(reader, opt.ReadByteOrder, opt.ReadProto)
