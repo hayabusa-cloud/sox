@@ -2,11 +2,12 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package sox
+package sox_test
 
 import (
 	"bytes"
 	"encoding/binary"
+	"hybscloud.com/sox"
 	"io"
 	"testing"
 )
@@ -15,8 +16,8 @@ func TestMessage_ReadStream(t *testing.T) {
 	t.Run("single message", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -42,11 +43,11 @@ func TestMessage_ReadStream(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple messages on small packets", func(t *testing.T) {
+	t.Run("multiple messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -102,21 +103,20 @@ func TestMessage_ReadStream(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple messages on large packets", func(t *testing.T) {
+	t.Run("many messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
 		s := []byte{0x41, 0x42, 0x43}
 		h := [1]byte{byte(len(s))}
 		p := append(h[:], s...)
-		p = append(p, p...)
-		p = append(p, p...)
-		p = append(p, p...)
-		p = append(p, p...)
+		for i := 0; i < 10; i++ {
+			p = append(p, p...)
+		}
 		go func() {
 			defer wr.Close()
 			n, err := wr.Write(p[0:3])
@@ -136,7 +136,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 16; i++ {
+		for i := 0; i < 1024; i++ {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -149,11 +149,11 @@ func TestMessage_ReadStream(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple large messages on large packets", func(t *testing.T) {
+	t.Run("multiple large messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -202,11 +202,11 @@ func TestMessage_ReadStream(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple huge messages on huge packets", func(t *testing.T) {
+	t.Run("multiple huge messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -247,13 +247,13 @@ func TestMessage_WriteStream(t *testing.T) {
 	t.Run("single message", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
-		w := NewMessageWriter(wr, func(options *MessageOptions) {
-			options.WriteProto = UnderlyingProtocolStream
+		w := sox.NewMessageWriter(wr, func(options *sox.MessageOptions) {
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -285,13 +285,13 @@ func TestMessage_WriteStream(t *testing.T) {
 	t.Run("multiple messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
-		w := NewMessageWriter(wr, func(options *MessageOptions) {
-			options.WriteProto = UnderlyingProtocolStream
+		w := sox.NewMessageWriter(wr, func(options *sox.MessageOptions) {
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -327,13 +327,13 @@ func TestMessage_WriteStream(t *testing.T) {
 	t.Run("multiple large messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
-		w := NewMessageWriter(wr, func(options *MessageOptions) {
-			options.WriteProto = UnderlyingProtocolStream
+		w := sox.NewMessageWriter(wr, func(options *sox.MessageOptions) {
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -372,13 +372,13 @@ func TestMessage_WriteStream(t *testing.T) {
 	t.Run("multiple huge messages", func(t *testing.T) {
 		rd, wr := io.Pipe()
 		defer rd.Close()
-		r := NewMessageReader(rd, func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r := sox.NewMessageReader(rd, func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
-		w := NewMessageWriter(wr, func(options *MessageOptions) {
-			options.WriteProto = UnderlyingProtocolStream
+		w := sox.NewMessageWriter(wr, func(options *sox.MessageOptions) {
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.LittleEndian
 			options.Nonblock = false
 		})
@@ -418,10 +418,10 @@ func TestMessage_WriteStream(t *testing.T) {
 func TestMessage_PipeStream(t *testing.T) {
 	t.Run("16 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -456,10 +456,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("253 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -496,10 +496,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("254 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -536,10 +536,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("255 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -576,10 +576,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("256 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -616,10 +616,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("500 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 1024)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -656,10 +656,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("20000 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 20000)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -696,10 +696,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("100000 bytes messages", func(t *testing.T) {
 		buf := make([]byte, 100000)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -736,10 +736,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 	t.Run("read limit", func(t *testing.T) {
 		buf := make([]byte, 64)
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.ReadLimit = 16
 			options.Nonblock = false
@@ -757,8 +757,8 @@ func TestMessage_PipeStream(t *testing.T) {
 		}()
 
 		_, err := r.Read(buf)
-		if err != ErrMsgTooLong {
-			t.Errorf("read expected %v but got %v\n", ErrMsgTooLong, err)
+		if err != sox.ErrMsgTooLong {
+			t.Errorf("read expected %v but got %v\n", sox.ErrMsgTooLong, err)
 			return
 		}
 	})
@@ -766,10 +766,10 @@ func TestMessage_PipeStream(t *testing.T) {
 
 func BenchmarkMessage_Stream(b *testing.B) {
 	b.Run("16 bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -777,10 +777,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("64 bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -788,10 +788,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("256 bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -799,10 +799,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("1k bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -810,10 +810,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("4k bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -821,10 +821,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("16k bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -832,10 +832,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("64k bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -843,10 +843,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("256k bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -854,10 +854,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("1m bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -865,10 +865,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("4m bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -876,10 +876,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("16m bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -887,10 +887,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("64m bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
@@ -898,10 +898,10 @@ func BenchmarkMessage_Stream(b *testing.B) {
 	})
 
 	b.Run("256m bytes message", func(b *testing.B) {
-		r, w := NewMessagePipe(func(options *MessageOptions) {
-			options.ReadProto = UnderlyingProtocolStream
+		r, w := sox.NewMessagePipe(func(options *sox.MessageOptions) {
+			options.ReadProto = sox.UnderlyingProtocolStream
 			options.ReadByteOrder = binary.BigEndian
-			options.WriteProto = UnderlyingProtocolStream
+			options.WriteProto = sox.UnderlyingProtocolStream
 			options.WriteByteOrder = binary.BigEndian
 			options.Nonblock = false
 		})
