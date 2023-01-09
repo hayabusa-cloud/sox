@@ -379,7 +379,7 @@ func newRingQueueConcurrentClose() *ringQueueConcurrentClose {
 func (rq *ringQueueConcurrentClose) Close() error {
 	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
 		tail := rq.tail.Load()
-		if tail&ringQueueStatusClosed == 1 {
+		if tail&ringQueueStatusClosed == ringQueueStatusClosed {
 			return nil
 		}
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
