@@ -71,10 +71,17 @@ func NewRingQueue[ItemType any](
 
 // RingQueueOptions holds optional parameters for RingQueue implementations
 type RingQueueOptions struct {
-	Capacity          int
+	// Capacity specifies the capacity of queue. The default Capacity is 32K
+	Capacity int
+	// ConcurrentProduce specifies whether the ItemProducer works concurrently or not
+	// It should be set as true, if there are multiple goroutines doing Produce operations
 	ConcurrentProduce bool
+	// ConcurrentConsume specifies whether the ItemConsumer works concurrently or not
+	// It should be set as true, if there are multiple goroutines doing Consumer operations
 	ConcurrentConsume bool
-	Nonblocking       bool
+	// Nonblocking specifies whether the Produce or Consume operations will NOT block
+	// even if it is temporarily unavailable or not
+	Nonblocking bool
 }
 
 type ringQueue[T any] struct {
