@@ -19,7 +19,7 @@ func TestEpoll(t *testing.T) {
 	}
 	defer ep.Close()
 
-	efd1, err := newEventfd()
+	efd1, err := NewEventfd()
 	if err != nil {
 		t.Errorf("new event fd: %v", err)
 		return
@@ -30,7 +30,7 @@ func TestEpoll(t *testing.T) {
 		t.Errorf("event fd write: %v", err)
 		return
 	}
-	efd2, err := newEventfd()
+	efd2, err := NewEventfd()
 	if err != nil {
 		t.Errorf("new event fd: %v", err)
 		return
@@ -52,9 +52,9 @@ func TestEpoll(t *testing.T) {
 		t.Errorf("epoll wait expected event num=%d but got %v", 0, events)
 		return
 	}
-	err = ep.add(efd1.fd, pollerEventIn)
+	err = ep.add(efd1.Fd(), pollerEventIn)
 	if err != nil {
-		t.Errorf("epoll add fd=%d: %v", efd1.fd, err)
+		t.Errorf("epoll add fd=%d: %v", efd1.Fd(), err)
 		return
 	}
 	events, err = ep.wait(d)
@@ -66,14 +66,14 @@ func TestEpoll(t *testing.T) {
 		t.Errorf("epoll wait expected event num=%d but got %v", 1, events)
 		return
 	}
-	if int(events[0].Fd) != efd1.fd || events[0].Events != pollerEventIn {
-		t.Errorf("epoll event expected fd=%d events=%d but got %v", efd1.fd, pollerEventIn, events[0])
+	if int(events[0].Fd) != efd1.Fd() || events[0].Events != pollerEventIn {
+		t.Errorf("epoll event expected fd=%d events=%d but got %v", efd1.Fd(), pollerEventIn, events[0])
 		return
 	}
 
-	err = ep.add(efd2.fd, pollerEventIn)
+	err = ep.add(efd2.Fd(), pollerEventIn)
 	if err != nil {
-		t.Errorf("epoll add fd=%d: %v", efd2.fd, err)
+		t.Errorf("epoll add fd=%d: %v", efd2.Fd(), err)
 		return
 	}
 	events, err = ep.wait(d)
@@ -85,8 +85,8 @@ func TestEpoll(t *testing.T) {
 		t.Errorf("epoll wait expected event num=%d but got %v", 1, events)
 		return
 	}
-	if int(events[0].Fd) != efd2.fd || events[0].Events != pollerEventIn {
-		t.Errorf("epoll event expected fd=%d events=%d but got %v", efd2.fd, pollerEventIn, events[0])
+	if int(events[0].Fd) != efd2.Fd() || events[0].Events != pollerEventIn {
+		t.Errorf("epoll event expected fd=%d events=%d but got %v", efd2.Fd(), pollerEventIn, events[0])
 		return
 	}
 
@@ -110,14 +110,14 @@ func TestEpoll(t *testing.T) {
 		return
 	}
 
-	err = ep.del(efd1.fd)
+	err = ep.del(efd1.Fd())
 	if err != nil {
-		t.Errorf("epoll del fd=%d: %v", efd1.fd, err)
+		t.Errorf("epoll del fd=%d: %v", efd1.Fd(), err)
 		return
 	}
-	err = ep.del(efd2.fd)
+	err = ep.del(efd2.Fd())
 	if err != nil {
-		t.Errorf("epoll del fd=%d: %v", efd2.fd, err)
+		t.Errorf("epoll del fd=%d: %v", efd2.Fd(), err)
 		return
 	}
 	err = efd1.WriteUint(5)

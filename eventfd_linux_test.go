@@ -4,13 +4,16 @@
 
 //go:build linux
 
-package sox
+package sox_test
 
-import "testing"
+import (
+	"hybscloud.com/sox"
+	"testing"
+)
 
-func TestEventObject_ReadWrite(t *testing.T) {
+func TestEventfd_ReadWrite(t *testing.T) {
 	t.Run("single write read", func(t *testing.T) {
-		evt, err := newEventfd()
+		evt, err := sox.NewEventfd()
 		if err != nil {
 			t.Errorf("new eventfd: %v", err)
 			return
@@ -31,14 +34,14 @@ func TestEventObject_ReadWrite(t *testing.T) {
 			return
 		}
 		val, err = evt.ReadUint()
-		if err != ErrTemporarilyUnavailable {
+		if err != sox.ErrTemporarilyUnavailable {
 			t.Errorf("read event object expected EGAIN but got: %d", val)
 			return
 		}
 	})
 
 	t.Run("multiple write and read", func(t *testing.T) {
-		evt, err := newEventfd()
+		evt, err := sox.NewEventfd()
 		if err != nil {
 			t.Errorf("new eventfd: %v", err)
 			return
@@ -69,7 +72,7 @@ func TestEventObject_ReadWrite(t *testing.T) {
 			return
 		}
 		val, err = evt.ReadUint()
-		if err != ErrTemporarilyUnavailable {
+		if err != sox.ErrTemporarilyUnavailable {
 			t.Errorf("read event object expected EGAIN but got: %d", val)
 			return
 		}
@@ -90,7 +93,7 @@ func TestEventObject_ReadWrite(t *testing.T) {
 	})
 
 	t.Run("write 0", func(t *testing.T) {
-		evt, err := newEventfd()
+		evt, err := sox.NewEventfd()
 		if err != nil {
 			t.Errorf("new eventfd: %v", err)
 			return
@@ -102,7 +105,7 @@ func TestEventObject_ReadWrite(t *testing.T) {
 			return
 		}
 		val, err := evt.ReadUint()
-		if err != ErrTemporarilyUnavailable {
+		if err != sox.ErrTemporarilyUnavailable {
 			t.Errorf("read event object expected EGAIN but got: %d", val)
 			return
 		}
