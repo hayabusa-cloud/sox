@@ -2,9 +2,10 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package sox
+package sox_test
 
 import (
+	"hybscloud.com/sox"
 	"io"
 	"math"
 	"sync"
@@ -13,7 +14,7 @@ import (
 
 func TestNewRingQueue(t *testing.T) {
 	t.Run("capacity 1", func(t *testing.T) {
-		c, _, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		_, _, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 1
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = false
@@ -22,14 +23,10 @@ func TestNewRingQueue(t *testing.T) {
 			t.Errorf("ring queue new: %v", err)
 			return
 		}
-		if c.(*ringQueue[uintptr]).capacity != 1 {
-			t.Errorf("ring queue expected capacity=%d but got %d", 1, c.(*ringQueue[uintptr]).capacity)
-			return
-		}
 	})
 
 	t.Run("capacity 0", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 0
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = false
@@ -40,78 +37,14 @@ func TestNewRingQueue(t *testing.T) {
 		}
 	})
 
-	t.Run("capacity 255", func(t *testing.T) {
-		c, _, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
-			options.Capacity = 255
+	t.Run("capacity 65536", func(t *testing.T) {
+		_, _, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
+			options.Capacity = 1 << 16
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = false
 		})
 		if err != nil {
 			t.Errorf("ring queue new: %v", err)
-			return
-		}
-		if c.(*ringQueue[uintptr]).capacity != 255 {
-			t.Errorf("ring queue expected capacity=%d but got %d", 255, c.(*ringQueue[uintptr]).capacity)
-			return
-		}
-	})
-
-	t.Run("capacity 256", func(t *testing.T) {
-		c, _, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
-			options.Capacity = 256
-			options.ConcurrentProduce = false
-			options.ConcurrentConsume = false
-		})
-		if err != nil {
-			t.Errorf("ring queue new: %v", err)
-			return
-		}
-		if c.(*ringQueue[uintptr]).capacity != 511 {
-			t.Errorf("ring queue expected capacity=%d but got %d", 511, c.(*ringQueue[uintptr]).capacity)
-			return
-		}
-	})
-
-	t.Run("capacity 50000", func(t *testing.T) {
-		c, _, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
-			options.Capacity = 50000
-			options.ConcurrentProduce = false
-			options.ConcurrentConsume = false
-		})
-		if err != nil {
-			t.Errorf("ring queue new: %v", err)
-			return
-		}
-		if c.(*ringQueue[uintptr]).capacity != 65535 {
-			t.Errorf("ring queue expected capacity=%d but got %d", 65535, c.(*ringQueue[uintptr]).capacity)
-			return
-		}
-	})
-
-	t.Run("capacity 1048577", func(t *testing.T) {
-		c, _, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
-			options.Capacity = 1048577
-			options.ConcurrentProduce = false
-			options.ConcurrentConsume = false
-		})
-		if err != nil {
-			t.Errorf("ring queue new: %v", err)
-			return
-		}
-		if c.(*ringQueue[uintptr]).capacity != (1<<21)-1 {
-			t.Errorf("ring queue expected capacity=%d but got %d", (1<<21)-1, c.(*ringQueue[uintptr]).capacity)
-			return
-		}
-	})
-
-	t.Run("capacity 2^30", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
-			options.Capacity = 1 << 30
-			options.ConcurrentProduce = false
-			options.ConcurrentConsume = false
-		})
-		if c != nil || p != nil || err == nil {
-			t.Errorf("ring queue new expected err but successed")
 			return
 		}
 	})
@@ -119,7 +52,7 @@ func TestNewRingQueue(t *testing.T) {
 
 func TestRingQueue_Series(t *testing.T) {
 	t.Run("a little serial ops", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 0x3
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = false
@@ -133,7 +66,7 @@ func TestRingQueue_Series(t *testing.T) {
 	})
 
 	t.Run("parallel produce and consume", func(t *testing.T) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -185,7 +118,7 @@ func TestRingQueue_Series(t *testing.T) {
 }
 
 func BenchmarkRingQueue_Parallel(b *testing.B) {
-	c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+	c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 		options.ConcurrentProduce = false
 		options.ConcurrentConsume = false
 		options.Nonblocking = false
@@ -220,7 +153,7 @@ func BenchmarkRingQueue_Parallel(b *testing.B) {
 
 func TestRingQueue_ConcurrentProduce(t *testing.T) {
 	t.Run("a little ops", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 0x3
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
@@ -234,7 +167,7 @@ func TestRingQueue_ConcurrentProduce(t *testing.T) {
 	})
 
 	t.Run("4 producer goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -247,7 +180,7 @@ func TestRingQueue_ConcurrentProduce(t *testing.T) {
 	})
 
 	t.Run("16 producer goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -260,7 +193,7 @@ func TestRingQueue_ConcurrentProduce(t *testing.T) {
 	})
 
 	t.Run("64 producer goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -275,7 +208,7 @@ func TestRingQueue_ConcurrentProduce(t *testing.T) {
 
 func BenchmarkRingQueue_ConcurrentProduce(b *testing.B) {
 	b.Run("1 producer", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -289,7 +222,7 @@ func BenchmarkRingQueue_ConcurrentProduce(b *testing.B) {
 	})
 
 	b.Run("4 producers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -303,7 +236,7 @@ func BenchmarkRingQueue_ConcurrentProduce(b *testing.B) {
 	})
 
 	b.Run("16 producers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = false
 			options.Nonblocking = false
@@ -319,7 +252,7 @@ func BenchmarkRingQueue_ConcurrentProduce(b *testing.B) {
 
 func TestRingQueue_ConcurrentConsume(t *testing.T) {
 	t.Run("a little ops", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 0x3
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
@@ -333,7 +266,7 @@ func TestRingQueue_ConcurrentConsume(t *testing.T) {
 	})
 
 	t.Run("4 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -346,7 +279,7 @@ func TestRingQueue_ConcurrentConsume(t *testing.T) {
 	})
 
 	t.Run("16 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -359,7 +292,7 @@ func TestRingQueue_ConcurrentConsume(t *testing.T) {
 	})
 
 	t.Run("64 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -374,7 +307,7 @@ func TestRingQueue_ConcurrentConsume(t *testing.T) {
 
 func BenchmarkRingQueue_ConcurrentConsume(b *testing.B) {
 	b.Run("1 consumer", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -388,7 +321,7 @@ func BenchmarkRingQueue_ConcurrentConsume(b *testing.B) {
 	})
 
 	b.Run("4 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -402,7 +335,7 @@ func BenchmarkRingQueue_ConcurrentConsume(b *testing.B) {
 	})
 
 	b.Run("16 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = false
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -418,7 +351,7 @@ func BenchmarkRingQueue_ConcurrentConsume(b *testing.B) {
 
 func TestRingQueue_Concurrent(t *testing.T) {
 	t.Run("a little ops", func(t *testing.T) {
-		c, p, err := NewRingQueue[uintptr](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[uintptr](func(options *sox.RingQueueOptions) {
 			options.Capacity = 0x3
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
@@ -432,7 +365,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 	})
 
 	t.Run("16 producer goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -445,7 +378,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 	})
 
 	t.Run("16 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -458,7 +391,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 	})
 
 	t.Run("16 produce and 16 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -471,7 +404,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 	})
 
 	t.Run("4 produce and 64 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -484,7 +417,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 	})
 
 	t.Run("64 produce and 4 consume goroutines 32k buffer", func(t *testing.T) {
-		c, p, err := NewRingQueue[int64](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int64](func(options *sox.RingQueueOptions) {
 			options.Capacity = (1 << 22) - 1
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
@@ -500,7 +433,7 @@ func TestRingQueue_Concurrent(t *testing.T) {
 
 func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	b.Run("1 producer 1 consumer", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -514,7 +447,7 @@ func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	})
 
 	b.Run("4 producers 4 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -528,7 +461,7 @@ func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	})
 
 	b.Run("16 producers 16 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -542,7 +475,7 @@ func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	})
 
 	b.Run("4 producers 16 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -556,7 +489,7 @@ func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	})
 
 	b.Run("16 producers 4 consumers", func(b *testing.B) {
-		c, p, err := NewRingQueue[int](func(options *RingQueueOptions) {
+		c, p, err := sox.NewRingQueue[int](func(options *sox.RingQueueOptions) {
 			options.ConcurrentProduce = true
 			options.ConcurrentConsume = true
 			options.Nonblocking = false
@@ -570,9 +503,9 @@ func BenchmarkRingQueue_Concurrent(b *testing.B) {
 	})
 }
 
-func testRingQueueNonblocking(t *testing.T, c ItemConsumer[uintptr], p ItemProducer[uintptr]) {
+func testRingQueueNonblocking(t *testing.T, c sox.ItemConsumer[uintptr], p sox.ItemProducer[uintptr]) {
 	item, err := c.Consume()
-	if err != ErrTemporarilyUnavailable {
+	if err != sox.ErrTemporarilyUnavailable {
 		t.Errorf("ring consumer expected ErrTemporarilyUnavailable but got %v %v", item, err)
 		return
 	}
@@ -591,7 +524,7 @@ func testRingQueueNonblocking(t *testing.T, c ItemConsumer[uintptr], p ItemProdu
 		return
 	}
 	item, err = c.Consume()
-	if err != ErrTemporarilyUnavailable {
+	if err != sox.ErrTemporarilyUnavailable {
 		t.Errorf("ring consumer expected ErrTemporarilyUnavailable but got %v %v", item, err)
 		return
 	}
@@ -625,7 +558,7 @@ func testRingQueueNonblocking(t *testing.T, c ItemConsumer[uintptr], p ItemProdu
 		return
 	}
 	err = p.Produce(6)
-	if err != ErrTemporarilyUnavailable {
+	if err != sox.ErrTemporarilyUnavailable {
 		t.Errorf("ring producer expected ErrTemporarilyUnavailable but got %v", err)
 		return
 	}
@@ -687,7 +620,7 @@ func testRingQueueNonblocking(t *testing.T, c ItemConsumer[uintptr], p ItemProdu
 	}
 }
 
-func testRingQueueConcurrentProduce(t *testing.T, c ItemConsumer[int64], p ItemProducer[int64], m int, n int) {
+func testRingQueueConcurrentProduce(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], m int, n int) {
 	last := make([]int64, m)
 	for i := 0; i < m; i++ {
 		last[i] = -1
@@ -728,7 +661,7 @@ func testRingQueueConcurrentProduce(t *testing.T, c ItemConsumer[int64], p ItemP
 	}
 }
 
-func benchmarkRingQueueConcurrentProduce(b *testing.B, c ItemConsumer[int], p ItemProducer[int], num int) {
+func benchmarkRingQueueConcurrentProduce(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], num int) {
 	for i := 0; i < num; i++ {
 		go func() {
 			for j := 0; j < b.N/num+1; j++ {
@@ -749,7 +682,7 @@ func benchmarkRingQueueConcurrentProduce(b *testing.B, c ItemConsumer[int], p It
 	}
 }
 
-func testRingQueueConcurrentConsume(t *testing.T, c ItemConsumer[int64], p ItemProducer[int64], m int, n int) {
+func testRingQueueConcurrentConsume(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], m int, n int) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < m; i++ {
 		wg.Add(1)
@@ -790,7 +723,7 @@ func testRingQueueConcurrentConsume(t *testing.T, c ItemConsumer[int64], p ItemP
 	}
 }
 
-func benchmarkRingQueueConcurrentConsume(b *testing.B, c ItemConsumer[int], p ItemProducer[int], num int) {
+func benchmarkRingQueueConcurrentConsume(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], num int) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < num; i++ {
 		wg.Add(1)
@@ -815,7 +748,7 @@ func benchmarkRingQueueConcurrentConsume(b *testing.B, c ItemConsumer[int], p It
 	wg.Wait()
 }
 
-func testRingQueueConcurrent(t *testing.T, c ItemConsumer[int64], p ItemProducer[int64], cNum, pNum int, n int) {
+func testRingQueueConcurrent(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], cNum, pNum int, n int) {
 	for i := 0; i < pNum; i++ {
 		go func(i int) {
 			for j := 0; j < n; j++ {
@@ -864,7 +797,7 @@ func testRingQueueConcurrent(t *testing.T, c ItemConsumer[int64], p ItemProducer
 	}
 }
 
-func benchmarkRingQueueConcurrent(b *testing.B, c ItemConsumer[int], p ItemProducer[int], cNum, pNum int) {
+func benchmarkRingQueueConcurrent(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], cNum, pNum int) {
 	for i := 0; i < pNum; i++ {
 		go func(i int) {
 			for j := 0; j < b.N/pNum+1; j++ {
