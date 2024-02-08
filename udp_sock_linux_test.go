@@ -4,17 +4,18 @@
 
 //go:build linux
 
-package sox
+package sox_test
 
 import (
 	"bytes"
+	"hybscloud.com/sox"
 	"io"
 	"runtime"
 	"testing"
 )
 
 func TestUDPSocket_ReadWrite(t *testing.T) {
-	addr0, err := ResolveUDPAddr("udp6", "[::1]:8088")
+	addr0, err := sox.ResolveUDPAddr("udp6", "[::1]:8088")
 	if err != nil {
 		t.Error(err)
 		return
@@ -22,7 +23,7 @@ func TestUDPSocket_ReadWrite(t *testing.T) {
 	p := []byte("test0123456789")
 	wait := make(chan struct{}, 1)
 	go func() {
-		conn, err := ListenUDP6(addr0)
+		conn, err := sox.ListenUDP6(addr0)
 		if err != nil {
 			t.Error(err)
 			return
@@ -31,7 +32,7 @@ func TestUDPSocket_ReadWrite(t *testing.T) {
 		wait <- struct{}{}
 		for {
 			_, addr, err := conn.RecvFrom(buf)
-			if err == ErrTemporarilyUnavailable {
+			if err == sox.ErrTemporarilyUnavailable {
 				runtime.Gosched()
 				continue
 			}
@@ -47,14 +48,14 @@ func TestUDPSocket_ReadWrite(t *testing.T) {
 		}
 	}()
 
-	addr1, err := ResolveUDPAddr("udp6", "[::1]:8089")
+	addr1, err := sox.ResolveUDPAddr("udp6", "[::1]:8089")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	<-wait
-	conn, err := DialUDP6(addr1, addr0)
+	conn, err := sox.DialUDP6(addr1, addr0)
 	if err != nil {
 		t.Error(err)
 		return
@@ -73,7 +74,7 @@ func TestUDPSocket_ReadWrite(t *testing.T) {
 
 		buf := make([]byte, len(p))
 		n, err = conn.Read(buf)
-		if err == ErrTemporarilyUnavailable {
+		if err == sox.ErrTemporarilyUnavailable {
 			runtime.Gosched()
 			continue
 		}

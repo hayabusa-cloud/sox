@@ -2,9 +2,10 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package sox
+package sox_test
 
 import (
+	"hybscloud.com/sox"
 	"os"
 	"testing"
 	"unsafe"
@@ -12,7 +13,7 @@ import (
 
 func TestAlignedMemBlocks(t *testing.T) {
 	t.Run("single", func(t *testing.T) {
-		b := AlignedMemBlocks(1)[0]
+		b := sox.AlignedMemBlocks(1)[0]
 		if len(b) != os.Getpagesize() {
 			t.Errorf("expected slice len %d but got %d", os.Getpagesize(), len(b))
 			return
@@ -30,7 +31,7 @@ func TestAlignedMemBlocks(t *testing.T) {
 
 	t.Run("multiple", func(t *testing.T) {
 		const n = 1024
-		blocks := AlignedMemBlocks(n)
+		blocks := sox.AlignedMemBlocks(n)
 		for i := 0; i < n; i++ {
 			b := blocks[i]
 			if len(b) != os.Getpagesize() {
