@@ -19,7 +19,7 @@ const (
 )
 
 func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
 		nfd, sa, err = unix.Accept4(fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
 		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 			continue
@@ -38,7 +38,7 @@ func connectWait(fd int, sa unix.Sockaddr) error {
 	} else if err != unix.EINPROGRESS {
 		return errFromUnixErrno(err)
 	}
-	for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 		val, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ERROR)
 		if err != nil {
 			return errFromUnixErrno(err)

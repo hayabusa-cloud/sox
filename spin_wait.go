@@ -6,8 +6,42 @@ package sox
 
 import (
 	"math"
+	"runtime"
 	"time"
+	_ "unsafe"
 )
+
+const (
+	procYieldCycles = 16
+)
+
+// SpinWait is a lightweight synchronization type that
+// you can use in low-level scenarios with lower cost.
+// The zero value for SpinWait is ready to use.
+type SpinWait struct {
+	i uint32
+}
+
+// Once performs a single spin
+func (s *SpinWait) Once() {
+	s.i++
+	if s.WillYield() {
+		runtime.Gosched()
+		return
+	}
+	procyield(procYieldCycles)
+}
+
+// WillYield returns true if calling SpinOnce() will result
+// in occurring a thread sleeping instead of a simply procyield()
+func (s *SpinWait) WillYield() bool {
+	return s.i >= 8
+}
+
+// Reset resets the counter in SpinWait
+func (s *SpinWait) Reset() {
+	s.i = 0
+}
 
 const (
 	SpinWaitLevelClient = iota
@@ -15,10 +49,9 @@ const (
 	SpinWaitLevelConsume
 	spinWaitLevelProduce
 	spinWaitLevelAtomic
-	spinWaitLevelNoSleep
 )
 
-type SpinWait struct {
+type ParamSpinWait struct {
 	i     uint32
 	level int8
 	d     time.Duration
@@ -26,8 +59,8 @@ type SpinWait struct {
 	total int32
 }
 
-func NewSpinWait() *SpinWait {
-	return &SpinWait{
+func NewParamSpinWait() *ParamSpinWait {
+	return &ParamSpinWait{
 		i:     0,
 		level: SpinWaitLevelBlockingIO,
 		d:     jiffies,
@@ -36,20 +69,20 @@ func NewSpinWait() *SpinWait {
 	}
 }
 
-func (sw *SpinWait) SetLevel(level int) *SpinWait {
+func (sw *ParamSpinWait) SetLevel(level int) *ParamSpinWait {
 	if level < SpinWaitLevelClient {
 		sw.level = SpinWaitLevelClient
 		return sw
 	}
-	if level > spinWaitLevelNoSleep {
-		level = spinWaitLevelNoSleep
+	if level > spinWaitLevelAtomic {
+		level = spinWaitLevelAtomic
 	}
 	sw.level = int8(level)
 
 	return sw
 }
 
-func (sw *SpinWait) SetLimit(limit int) *SpinWait {
+func (sw *ParamSpinWait) SetLimit(limit int) *ParamSpinWait {
 	if limit > math.MaxUint32-1 {
 		limit = math.MaxUint32 - 1
 	}
@@ -58,47 +91,59 @@ func (sw *SpinWait) SetLimit(limit int) *SpinWait {
 	return sw
 }
 
-func (sw *SpinWait) SetDuration(d time.Duration) *SpinWait {
-	if d < jiffies {
-		d = jiffies
-	}
-	sw.d = d
-
-	return sw
-}
-
-func (sw *SpinWait) Once() {
+func (sw *ParamSpinWait) Once() {
 	sw.once(sw.level)
 }
 
-func (sw *SpinWait) OnceWithLevel(level int) {
+func (sw *ParamSpinWait) OnceWithLevel(level int) {
 	if level < SpinWaitLevelClient {
 		level = SpinWaitLevelClient
 	}
-	if level > spinWaitLevelNoSleep {
-		level = spinWaitLevelNoSleep
+	if level > spinWaitLevelAtomic {
+		level = spinWaitLevelAtomic
 	}
 	sw.once(int8(level))
 }
 
-func (sw *SpinWait) Reset() {
+func (sw *ParamSpinWait) WillYield() bool {
+	return sw.willYield(sw.level)
+}
+
+func (sw *ParamSpinWait) WillYieldWithLevel(level int8) bool {
+	return sw.willYield(level)
+}
+
+func (sw *ParamSpinWait) Reset() {
 	sw.i = 0
 	sw.total = 0
 }
 
-func (sw *SpinWait) Closed() bool {
+func (sw *ParamSpinWait) Closed() bool {
 	return sw.limit > 0 && sw.i >= sw.limit
 }
 
-func (sw *SpinWait) once(level int8) {
-	d := int32(0)
-	for i := sw.i; i > 0; i &= i - 1 {
-		d++
+func (sw *ParamSpinWait) willYield(level int8) bool {
+	x := int32(level << 1)
+	if sw.i&(1<<(x-min(x, sw.total>>1))-1) != 0 {
+		return false
 	}
-	d = d >> level
-	if d > 0 {
-		sw.total += d
-		time.Sleep(time.Duration(d) * sw.d)
-	}
-	sw.i++
+
+	return true
 }
+
+func (sw *ParamSpinWait) once(level int8) {
+	sw.i++
+	if !sw.willYield(level) {
+		procyield(procYieldCycles)
+		return
+	}
+	sw.total++
+	if level <= SpinWaitLevelBlockingIO {
+		time.Sleep(jiffies)
+	} else {
+		runtime.Gosched()
+	}
+}
+
+//go:linkname procyield runtime.procyield
+func procyield(cycles uint32)

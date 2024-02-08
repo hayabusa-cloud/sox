@@ -103,7 +103,7 @@ func newRingQueue[T any](opt *RingQueueOptions) *ringQueue[T] {
 }
 
 func (rq *ringQueue[T]) Produce(item T) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
 		if rq.closed {
 			return io.ErrClosedPipe
 		}
@@ -122,7 +122,7 @@ func (rq *ringQueue[T]) Produce(item T) error {
 }
 
 func (rq *ringQueue[T]) Consume() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
 		if rq.head == rq.tail {
 			if rq.closed {
 				return item, io.EOF
@@ -171,7 +171,7 @@ func newRingQueueConcurrentProduce[T any](opt *RingQueueOptions) *ringQueueConcu
 }
 
 func (rq *ringQueueConcurrentProduce[T]) Produce(item T) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			sw.Once()
@@ -203,7 +203,7 @@ func (rq *ringQueueConcurrentProduce[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrentProduce[T]) Consume() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			continue
@@ -251,7 +251,7 @@ func (rq *ringQueueConcurrentConsume[T]) Produce(item T) error {
 	if rq.closed {
 		return io.ErrClosedPipe
 	}
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
 		if (rq.tail+1)&rq.capacity == rq.head.Load()&rq.capacity {
 			if rq.Nonblocking {
 				break
@@ -268,7 +268,7 @@ func (rq *ringQueueConcurrentConsume[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrentConsume[T]) Consume() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
 		head := rq.head.Load()
 		if head == rq.tail {
 			if rq.closed {
@@ -315,7 +315,7 @@ func newRingQueueConcurrent[T any](opt *RingQueueOptions) *ringQueueConcurrent[T
 }
 
 func (rq *ringQueueConcurrent[T]) Produce(item T) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			sw.Once()
@@ -347,7 +347,7 @@ func (rq *ringQueueConcurrent[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrent[T]) Consume() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); {
+	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); {
 		head, tail := rq.head.Load(), rq.tail.Load()
 		if head == tail&ringQueueTailValueMask {
 			if tail&ringQueueStatusClosed == ringQueueStatusClosed {
@@ -384,7 +384,7 @@ func newRingQueueConcurrentClose() *ringQueueConcurrentClose {
 }
 
 func (rq *ringQueueConcurrentClose) Close() error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusClosed == ringQueueStatusClosed {
 			return nil

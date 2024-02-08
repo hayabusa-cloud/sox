@@ -4,16 +4,17 @@
 
 //go:build linux
 
-package sox
+package sox_test
 
 import (
 	"bytes"
+	"hybscloud.com/sox"
 	"io"
 	"testing"
 )
 
 func TestUnixSocket_ReadWrite(t *testing.T) {
-	addr0, err := ResolveUnixAddr("unixpacket", "@")
+	addr0, err := sox.ResolveUnixAddr("unixpacket", "@")
 	if err != nil {
 		t.Error(err)
 		return
@@ -21,7 +22,7 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 	p := []byte("test0123456789")
 	wait := make(chan struct{}, 1)
 	go func() {
-		lis, err := ListenUnix(addr0)
+		lis, err := sox.ListenUnix(addr0)
 		if err != nil {
 			t.Error(err)
 			return
@@ -35,7 +36,7 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 		}
 		buf := make([]byte, len(p))
 		for {
-			r := NewMessageReader(conn)
+			r := sox.NewMessageReader(conn)
 			rn, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read message: %v", err)
@@ -45,7 +46,7 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 				t.Errorf("read message expected %s but got %s", p, buf[:rn])
 				return
 			}
-			w := NewMessageWriter(conn)
+			w := sox.NewMessageWriter(conn)
 			wn, err := w.Write(buf[:rn])
 			if err != nil {
 				t.Errorf("write message: %v", err)
@@ -59,22 +60,22 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 		}
 	}()
 
-	addr1, err := ResolveUnixAddr("unixpacket", "@")
+	addr1, err := sox.ResolveUnixAddr("unixpacket", "@")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	<-wait
-	conn, err := DialUnix(addr1, addr0)
+	conn, err := sox.DialUnix(addr1, addr0)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	defer conn.Close()
 
-	for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
-		w := NewMessageWriter(conn)
+	for sw := sox.NewParamSpinWait(); !sw.Closed(); sw.Once() {
+		w := sox.NewMessageWriter(conn)
 		n, err := w.Write(p)
 		if err != nil {
 			t.Error(err)
@@ -86,9 +87,9 @@ func TestUnixSocket_ReadWrite(t *testing.T) {
 		}
 
 		buf := make([]byte, len(p))
-		r := NewMessageReader(conn)
+		r := sox.NewMessageReader(conn)
 		n, err = r.Read(buf)
-		if err == ErrTemporarilyUnavailable {
+		if err == sox.ErrTemporarilyUnavailable {
 			continue
 		}
 		if err != nil {

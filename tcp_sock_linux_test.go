@@ -4,16 +4,17 @@
 
 //go:build linux
 
-package sox
+package sox_test
 
 import (
 	"bytes"
+	"hybscloud.com/sox"
 	"io"
 	"testing"
 )
 
 func TestTCPSocket_ReadWrite(t *testing.T) {
-	addr0, err := ResolveTCPAddr("tcp6", "[::1]:8088")
+	addr0, err := sox.ResolveTCPAddr("tcp6", "[::1]:8088")
 	if err != nil {
 		t.Error(err)
 		return
@@ -21,7 +22,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 	p := []byte("test0123456789")
 	wait := make(chan struct{}, 1)
 	go func() {
-		lis, err := ListenTCP6(addr0)
+		lis, err := sox.ListenTCP6(addr0)
 		if err != nil {
 			t.Error(err)
 			return
@@ -34,7 +35,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 		buf := make([]byte, len(p))
 		for {
-			r := NewMessageReader(conn, MessageOptionsTCPSocket)
+			r := sox.NewMessageReader(conn, sox.MessageOptionsTCPSocket)
 			rn, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read message: %v", err)
@@ -44,7 +45,7 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 				t.Errorf("read message expected %s but got %s", p, buf[:rn])
 				return
 			}
-			w := NewMessageWriter(conn, MessageOptionsTCPSocket)
+			w := sox.NewMessageWriter(conn, sox.MessageOptionsTCPSocket)
 			wn, err := w.Write(buf[:rn])
 			if err != nil {
 				t.Errorf("write message: %v", err)
@@ -58,21 +59,21 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 	}()
 
-	addr1, err := ResolveTCPAddr("tcp6", "[::1]:8089")
+	addr1, err := sox.ResolveTCPAddr("tcp6", "[::1]:8089")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
 	<-wait
-	conn, err := DialTCP6(addr1, addr0)
+	conn, err := sox.DialTCP6(addr1, addr0)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
-		w := NewMessageWriter(conn, MessageOptionsTCPSocket)
+	for sw := sox.NewParamSpinWait(); !sw.Closed(); sw.Once() {
+		w := sox.NewMessageWriter(conn, sox.MessageOptionsTCPSocket)
 		n, err := w.Write(p)
 		if err != nil {
 			t.Error(err)
@@ -84,9 +85,9 @@ func TestTCPSocket_ReadWrite(t *testing.T) {
 		}
 
 		buf := make([]byte, len(p))
-		r := NewMessageReader(conn, MessageOptionsTCPSocket)
+		r := sox.NewMessageReader(conn, sox.MessageOptionsTCPSocket)
 		n, err = r.Read(buf)
-		if err == ErrTemporarilyUnavailable {
+		if err == sox.ErrTemporarilyUnavailable {
 			continue
 		}
 		if err != nil {

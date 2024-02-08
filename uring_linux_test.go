@@ -58,7 +58,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		dl := time.Now().Add(2 * time.Second)
-		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+		for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 			err := ur.poll(1)
 			if err != nil {
 				t.Errorf("io_ring_enter poll: %v", err)
@@ -118,7 +118,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		dl := time.Now().Add(2 * time.Second)
-		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+		for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 			err := ur.poll(1)
 			if err != nil {
 				t.Errorf("io_ring_enter poll: %v", err)
@@ -194,7 +194,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		dl := time.Now().Add(2 * time.Second)
-		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+		for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 			err := ur.poll(1)
 			if err != nil {
 				t.Errorf("io_ring_enter poll: %v", err)
@@ -252,7 +252,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		dl := time.Now().Add(2 * time.Second)
-		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+		for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 			err := ur.poll(1)
 			if err != nil {
 				t.Errorf("io_ring_enter poll: %v", err)

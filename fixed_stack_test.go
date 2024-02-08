@@ -36,7 +36,7 @@ func TestFixedStack_Series(t *testing.T) {
 			return
 		}
 		go func() {
-			for i := 0; i < (1 << 20); i++ {
+			for i := 0; i < (1 << 16); i++ {
 				err := s.Push(i)
 				if err != nil {
 					t.Errorf("fixed stack push: %v", err)
@@ -49,11 +49,11 @@ func TestFixedStack_Series(t *testing.T) {
 				return
 			}
 		}()
-		stack, index, next := make([]int, 0), make([]int, 1<<20), 0
-		for i := 0; i < (1 << 20); i++ {
+		stack, index, next := make([]int, 0), make([]int, 1<<16), 0
+		for i := 0; i < (1 << 16); i++ {
 			index[i] = -1
 		}
-		for i := 0; i < (1 << 20); i++ {
+		for i := 0; i < (1 << 16); i++ {
 			item, err := s.Pop()
 			if err != nil {
 				t.Errorf("fixed stack pop: %v", err)

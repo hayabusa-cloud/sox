@@ -186,7 +186,7 @@ func (msg *message) close() error {
 	if msg.done {
 		return nil
 	}
-	for sw := NewSpinWait(); !sw.Closed(); {
+	for sw := NewParamSpinWait(); !sw.Closed(); {
 		status := msg.status.Load()
 		if (status & (messageStatusRead | messageStatusWrite)) == (messageStatusRead | messageStatusWrite) {
 			if msg.nonblock {
@@ -375,13 +375,14 @@ func (msg *message) enterRead() (oldStatus uint32, ok bool) {
 	if msg.wr == nil {
 		return 0, true
 	}
-	for sw := NewSpinWait(); !sw.Closed(); {
+	sw := SpinWait{}
+	for {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusRead) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusRead) {
 				return oldStatus, true
 			}
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		} else if !msg.nonblock {
 			sw.Once()
@@ -389,18 +390,18 @@ func (msg *message) enterRead() (oldStatus uint32, ok bool) {
 		}
 		return oldStatus, false
 	}
-
-	return oldStatus, false
 }
 func (msg *message) exitRead() (oldStatus uint32) {
 	if msg.wr == nil {
 		return 0
 	}
-	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	sw := SpinWait{}
+	for {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusRead) {
 			break
 		}
+		sw.Once()
 	}
 	return
 }
@@ -529,13 +530,14 @@ func (msg *message) enterWrite() (oldStatus uint32, ok bool) {
 	if msg.rd == nil {
 		return 0, true
 	}
-	for sw := NewSpinWait(); !sw.Closed(); {
+	sw := SpinWait{}
+	for {
 		oldStatus = msg.status.Load()
 		if (oldStatus & ^messageStatusWrite) == 0 {
 			if msg.status.CompareAndSwap(oldStatus, oldStatus|messageStatusWrite) {
 				return oldStatus, true
 			}
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		} else if !msg.nonblock {
 			sw.Once()
@@ -543,18 +545,18 @@ func (msg *message) enterWrite() (oldStatus uint32, ok bool) {
 		}
 		return oldStatus, false
 	}
-
-	return oldStatus, false
 }
 func (msg *message) exitWrite() (oldStatus uint32) {
 	if msg.rd == nil {
 		return 0
 	}
-	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	sw := SpinWait{}
+	for {
 		oldStatus = msg.status.Load()
 		if msg.status.CompareAndSwap(oldStatus, oldStatus&^messageStatusWrite) {
 			break
 		}
+		sw.Once()
 	}
 	return
 }

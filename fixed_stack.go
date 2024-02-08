@@ -91,7 +91,8 @@ func newFixedStack[T any](stack []T, opt *FixedStackOptions) *fixedStack[T] {
 }
 
 func (s *fixedStack[T]) Push(item T) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {
 			return io.ErrClosedPipe
@@ -100,10 +101,12 @@ func (s *fixedStack[T]) Push(item T) error {
 			if s.Nonblocking {
 				return ErrTemporarilyUnavailable
 			}
+			sw.Once()
 			continue
 		}
 		s.stack[top] = item
 		if !s.top.CompareAndSwap(top, top+1) {
+			sw.Once()
 			continue
 		}
 		break
@@ -113,7 +116,8 @@ func (s *fixedStack[T]) Push(item T) error {
 }
 
 func (s *fixedStack[T]) Pop() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume)
+	for {
 		top := s.top.Load()
 		if top&fixedStackTopValueMask <= 0 {
 			if top&fixedStackStatusClosed == fixedStackStatusClosed {
@@ -122,6 +126,7 @@ func (s *fixedStack[T]) Pop() (item T, err error) {
 			if s.Nonblocking {
 				return item, ErrTemporarilyUnavailable
 			}
+			sw.Once()
 			continue
 		}
 		item = s.stack[s.top.Add(math.MaxUint32)&fixedStackTopValueMask]
@@ -132,13 +137,14 @@ func (s *fixedStack[T]) Pop() (item T, err error) {
 }
 
 func (s *fixedStack[T]) Close() error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {
 			return nil
 		}
 		if swapped := s.top.CompareAndSwap(top, top|fixedStackStatusClosed); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		}
 
@@ -170,7 +176,8 @@ func newFixedStackConcurrent[T any](stack []T, opt *FixedStackOptions) *fixedSta
 }
 
 func (s *fixedStackConcurrent[T]) Push(item T) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	for {
 		top := s.top.Load()
 		if top&fixedStackStatusWriting == fixedStackStatusWriting {
 			sw.Once()
@@ -188,7 +195,7 @@ func (s *fixedStackConcurrent[T]) Push(item T) error {
 		}
 		newTop := fixedStackStatusWriting | (top&fixedStackTopValueMask + 1)
 		if !s.top.CompareAndSwap(top, newTop) {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		}
 		s.stack[top&fixedStackTopValueMask] = item
@@ -200,7 +207,8 @@ func (s *fixedStackConcurrent[T]) Push(item T) error {
 }
 
 func (s *fixedStackConcurrent[T]) Pop() (item T, err error) {
-	for sw := NewSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); {
+	sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume)
+	for {
 		top := s.top.Load()
 		if top&fixedStackTopValueMask <= 0 {
 			if top&fixedStackStatusClosed == fixedStackStatusClosed {
@@ -218,7 +226,7 @@ func (s *fixedStackConcurrent[T]) Pop() (item T, err error) {
 		}
 		newTop := fixedStackStatusWriting | (top&fixedStackTopValueMask - 1)
 		if !s.top.CompareAndSwap(top, newTop) {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		}
 		item = s.stack[newTop&fixedStackTopValueMask]
@@ -230,7 +238,8 @@ func (s *fixedStackConcurrent[T]) Pop() (item T, err error) {
 }
 
 func (s *fixedStackConcurrent[T]) Close() error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {
 			return nil
@@ -240,7 +249,7 @@ func (s *fixedStackConcurrent[T]) Close() error {
 			continue
 		}
 		if swapped := s.top.CompareAndSwap(top, top|fixedStackStatusClosed); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.Once()
 			continue
 		}
 

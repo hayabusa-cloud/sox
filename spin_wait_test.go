@@ -1,10 +1,11 @@
-// ©Hayabusa Cloud Co., Ltd. 2022. All rights reserved.
+// ©Hayabusa Cloud Co., Ltd. 2023. All rights reserved.
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package sox
+package sox_test
 
 import (
+	"hybscloud.com/sox"
 	"math"
 	"runtime"
 	"sync/atomic"
@@ -27,14 +28,14 @@ func TestSpinWaiter(t *testing.T) {
 				continue
 			}
 			if val > math.MaxInt16 {
-				time.Sleep(jiffies)
+				time.Sleep(time.Millisecond)
 			}
 		}
 	}
 	t.Run("common usage", func(t *testing.T) {
 		x := atomic.Int32{}
 		go fn(&x)
-		for sw := NewSpinWait(); !sw.Closed(); sw.Once() {
+		for sw := sox.NewParamSpinWait(); !sw.Closed(); sw.Once() {
 			val := x.Load()
 			//  some actions
 			runtime.Gosched()
@@ -52,61 +53,83 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 0", func(t *testing.T) {
-		sw := NewSpinWait().SetLevel(SpinWaitLevelClient)
+		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelClient)
+		total := 0
 		for i := 0; i < 1<<4; i++ {
+			if sw.WillYield() {
+				total++
+			}
 			sw.Once()
 		}
-		if sw.total != 1<<5 {
-			t.Errorf("expected total wait %d but got %d", 1<<5, sw.total)
+		if total != 1<<4 {
+			t.Errorf("expected total wait %d but got %d", 1<<4, total)
 		}
 	})
 
 	t.Run("level 1", func(t *testing.T) {
-		sw := NewSpinWait().SetLevel(SpinWaitLevelBlockingIO)
+		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelBlockingIO)
+		total := 0
 		for i := 0; i < 1<<5; i++ {
+			if sw.WillYield() {
+				total++
+			}
 			sw.Once()
 		}
-		if sw.total != 1<<5 {
-			t.Errorf("expected total wait %d but got %d", 1<<5, sw.total)
+		if total <= 1<<4 {
+			t.Errorf("expected total wait>%d but got %d", 1<<4, total)
 		}
 	})
 
 	t.Run("level 2", func(t *testing.T) {
-		sw := NewSpinWait().SetLevel(SpinWaitLevelConsume)
+		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume)
+		total := 0
 		for i := 0; i < 1<<7; i++ {
+			if sw.WillYield() {
+				total++
+			}
 			sw.Once()
 		}
-		if sw.total != 1<<6 {
-			t.Errorf("expected total wait %d but got %d", 1<<6, sw.total)
+		if total <= 1<<6 {
+			t.Errorf("expected total wait>%d but got %d", 1<<6, total)
 		}
 	})
 
 	t.Run("level 3", func(t *testing.T) {
-		sw := NewSpinWait().SetLevel(spinWaitLevelProduce)
+		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 1)
+		total := 0
 		for i := 0; i < 1<<10; i++ {
+			if sw.WillYield() {
+				total++
+			}
 			sw.Once()
 		}
-		if sw.total <= 1<<5 || sw.total >= 1<<6 {
-			t.Errorf("expected total wait between %d and %d but got %d", 1<<5, 1<<6, sw.total)
+		if total <= 1<<9 || total >= 1<<10 {
+			t.Errorf("expected total wait between %d and %d but got %d", 1<<9, 1<<10, total)
 		}
 	})
 
 	t.Run("level 4", func(t *testing.T) {
-		sw := NewSpinWait().SetLevel(spinWaitLevelAtomic)
-		for i := 0; i < 1<<16; i++ {
+		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 2)
+		total := 0
+		for i := 0; i < 1<<14; i++ {
+			if sw.WillYield() {
+				total++
+			}
 			sw.Once()
 		}
-		if sw.total != 1 {
-			t.Errorf("expected total wait %d but got %d", 1, sw.total)
+		if total <= 1<<13 || total >= 1<<14 {
+			t.Errorf("expected total wait between %d and %d but got %d", 1<<13, 1<<14, total)
 		}
 	})
 
 	t.Run("timeout", func(t *testing.T) {
-		sw := NewSpinWait().SetLimit(128)
+		sw := sox.NewParamSpinWait().SetLimit(128)
+		cnt := 0
 		for ; !sw.Closed(); sw.Once() {
+			cnt++
 		}
-		if sw.i != 128 {
-			t.Errorf("expected spin waiter wait %d times but executed %d times", 64, sw.i)
+		if cnt != 128 {
+			t.Errorf("expected spin waiter wait %d times but executed %d times", 128, cnt)
 		}
 	})
 }

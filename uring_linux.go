@@ -224,8 +224,10 @@ func (ur *ioUring) registerPoller(p *epoll) (int, error) {
 }
 
 func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	sw := SpinWait{}
+	for {
 		if !ur.sqLock.CompareAndSwap(false, true) {
+			sw.Once()
 			continue
 		}
 		break
@@ -279,7 +281,8 @@ func (ur *ioUring) poll(n int) error {
 }
 
 func (ur *ioUring) wait() (*ioUringCqe, error) {
-	for sw := NewSpinWait().SetLevel(spinWaitLevelAtomic); !sw.Closed(); sw.Once() {
+	sw := SpinWait{}
+	for {
 		h, t := atomic.LoadUint32(ur.cq.kHead), atomic.LoadUint32(ur.cq.kTail)
 		if h == t {
 			break
@@ -288,6 +291,7 @@ func (ur *ioUring) wait() (*ioUringCqe, error) {
 		e := &ur.cq.cqes[h]
 		ok := atomic.CompareAndSwapUint32(ur.cq.kHead, h, (h+1)&(*ur.cq.kRingMask))
 		if !ok {
+			sw.Once()
 			continue
 		}
 
