@@ -221,7 +221,7 @@ func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, add
 		return ErrTemporarilyUnavailable
 	}
 
-	e := &ur.sq.sqes[t]
+	e := &ur.sq.sqes[t&*ur.sq.kRingMask]
 	e.opcode = op
 	e.flags = IOSQE_ASYNC
 	e.fd = int32(fd)
@@ -231,7 +231,8 @@ func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, add
 	e.uflags = uflags
 	e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
 
-	*ur.sq.kTail = (t + 1) & (*ur.sq.kRingMask)
+	ur.sq.array[t&*ur.sq.kRingMask] = t & *ur.sq.kRingMask
+	*ur.sq.kTail++
 
 	return nil
 }
@@ -270,8 +271,8 @@ func (ur *ioUring) wait() (*ioUringCqe, error) {
 			break
 		}
 
-		e := &ur.cq.cqes[h]
-		ok := atomic.CompareAndSwapUint32(ur.cq.kHead, h, (h+1)&(*ur.cq.kRingMask))
+		e := &ur.cq.cqes[h&*ur.cq.kRingMask]
+		ok := atomic.CompareAndSwapUint32(ur.cq.kHead, h, h+1)
 		if ok {
 			return e, nil
 		}
