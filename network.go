@@ -20,7 +20,7 @@ var (
 	ErrSystemFileLimit        = errors.New("system open fd limit")
 	ErrNoDevice               = errors.New("no device")
 	ErrNoAvailableMemory      = errors.New("no available kernel memory")
-	ErrNoPermission           = errors.New("operation not permiited")
+	ErrNoPermission           = errors.New("operation not permitted")
 )
 
 type NetworkType int
