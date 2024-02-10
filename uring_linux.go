@@ -9,7 +9,6 @@ package sox
 import (
 	"context"
 	"golang.org/x/sys/unix"
-	"reflect"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -136,22 +135,12 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	uring.sq.kRingEntries = (*uint32)(unsafe.Pointer(ptr + uintptr(params.sqOff.ringEntries)))
 	uring.sq.kFlags = (*uint32)(unsafe.Pointer(ptr + uintptr(params.sqOff.flags)))
 	uring.sq.kDropped = (*uint32)(unsafe.Pointer(ptr + uintptr(params.sqOff.dropped)))
-	uring.sq.array = *(*[]uint32)(
-		unsafe.Pointer(&reflect.SliceHeader{
-			Data: ptr + uintptr(params.sqOff.array),
-			Len:  int(params.sqEntries),
-			Cap:  int(params.sqEntries),
-		}))
+	uring.sq.array = unsafe.Slice((*uint32)(unsafe.Pointer(ptr+uintptr(params.sqOff.array))), int(params.sqEntries))
 	b, err = unix.Mmap(uring.ringFd, IORING_OFF_SQES, int(params.sqEntries)*int(unsafe.Sizeof(ioUringSqe{})), unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC, unix.MAP_SHARED|unix.MAP_POPULATE)
 	if err != nil {
 		return uring, errFromUnixErrno(err)
 	}
-	uring.sq.sqes = *(*[]ioUringSqe)(
-		unsafe.Pointer(&reflect.SliceHeader{
-			Data: uintptr(unsafe.Pointer(&b[0])),
-			Len:  int(params.sqEntries),
-			Cap:  int(params.sqEntries),
-		}))
+	uring.sq.sqes = unsafe.Slice((*ioUringSqe)(unsafe.Pointer(&b[0])), int(params.sqEntries))
 
 	b, err = unix.Mmap(uring.ringFd, IORING_OFF_CQ_RING, int(uring.cq.ringSz), unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC, unix.MAP_SHARED|unix.MAP_POPULATE)
 	if err != nil {
@@ -163,13 +152,7 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	uring.cq.kRingMask = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.ringMask)))
 	uring.cq.kRingEntries = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.ringEntries)))
 	uring.cq.kOverflow = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.overflow)))
-
-	uring.cq.cqes = *(*[]ioUringCqe)(
-		unsafe.Pointer(&reflect.SliceHeader{
-			Data: ptr + uintptr(params.cqOff.cqes),
-			Len:  int(params.cqEntries),
-			Cap:  int(params.cqEntries),
-		}))
+	uring.cq.cqes = unsafe.Slice((*ioUringCqe)(unsafe.Pointer(ptr+uintptr(params.cqOff.cqes))), int(params.cqEntries))
 
 	return uring, nil
 }
