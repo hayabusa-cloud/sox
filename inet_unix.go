@@ -202,9 +202,10 @@ func inet4Sockaddr(sa *unix.SockaddrInet4) (ptr unsafe.Pointer, n int, err error
 		Family: unix.AF_INET,
 		Addr:   sa.Addr,
 	}
-	rawP := (*[]byte)(unsafe.Pointer(&rawSa.Port))
-	binary.BigEndian.PutUint16(*rawP, uint16(sa.Port))
-	return unsafe.Pointer(rawSa), unix.SizeofSockaddrInet4, nil
+	b := unsafe.Slice((*byte)(unsafe.Pointer(rawSa)), unix.SizeofSockaddrInet4)
+	portOffset, portSize := unsafe.Sizeof(uint16(0)), unsafe.Sizeof(uint16(0))
+	binary.BigEndian.PutUint16(b[portOffset:portOffset+portSize], uint16(sa.Port))
+	return unsafe.Pointer(unsafe.SliceData(b)), unix.SizeofSockaddrInet4, nil
 }
 
 func inet6Sockaddr(sa *unix.SockaddrInet6) (ptr unsafe.Pointer, n int, err error) {
@@ -213,7 +214,8 @@ func inet6Sockaddr(sa *unix.SockaddrInet6) (ptr unsafe.Pointer, n int, err error
 		Addr:     sa.Addr,
 		Scope_id: sa.ZoneId,
 	}
-	rawP := (*[]byte)(unsafe.Pointer(&rawSa.Port))
-	binary.BigEndian.PutUint16(*rawP, uint16(sa.Port))
-	return unsafe.Pointer(rawSa), unix.SizeofSockaddrInet6, nil
+	b := unsafe.Slice((*byte)(unsafe.Pointer(rawSa)), unix.SizeofSockaddrInet6)
+	portOffset, portSize := unsafe.Sizeof(uint16(0)), unsafe.Sizeof(uint16(0))
+	binary.BigEndian.PutUint16(b[portOffset:portOffset+portSize], uint16(sa.Port))
+	return unsafe.Pointer(unsafe.SliceData(b)), unix.SizeofSockaddrInet6, nil
 }
