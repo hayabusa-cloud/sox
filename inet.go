@@ -5,9 +5,16 @@
 package sox
 
 import (
+	"context"
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
+)
+
+var (
+	IPv4LoopBack = net.IPv4(127, 0, 0, 1)
+	IPv6LoopBack = net.IPv6loopback
 )
 
 type IPAddr = net.IPAddr
@@ -56,6 +63,53 @@ var (
 	ResolveTCPAddr = net.ResolveTCPAddr
 	ResolveUDPAddr = net.ResolveUDPAddr
 )
+
+func ResolveSCTPAddr(network, address string) (*SCTPAddr, error) {
+	switch network {
+	case "sctp", "sctp4", "sctp6":
+	case "": // a hint wildcard for Go 1.0 undocumented behavior
+		network = "sctp"
+	default:
+		return nil, UnknownNetworkError(network)
+	}
+	var want6 bool
+	if network == "sctp" || network == "sctp6" {
+		want6 = true
+	}
+	if network == "sctp" && strings.ContainsAny(address, ":[") {
+		want6 = true
+	}
+	if addrPort, err := netip.ParseAddrPort(address); err == nil {
+		if addrPort.Addr().Is6() && want6 {
+			return SCTPAddrFromAddrPort(addrPort), nil
+		}
+		if addrPort.Addr().Is4() && network != "sctp6" {
+			return SCTPAddrFromAddrPort(addrPort), nil
+		}
+	}
+	addrList, err := net.DefaultResolver.LookupAddr(context.Background(), address)
+	if err != nil {
+		return nil, err
+	}
+	var addr4 *SCTPAddr = nil
+	for _, addr := range addrList {
+		addrPort, err := netip.ParseAddrPort(addr)
+		if err != nil {
+			continue
+		}
+		if want6 && addrPort.Addr().Is6() {
+			return SCTPAddrFromAddrPort(addrPort), nil
+		}
+		if addr4 == nil && addrPort.Addr().Is4() {
+			addr4 = SCTPAddrFromAddrPort(addrPort)
+			if !want6 {
+				return addr4, nil
+			}
+		}
+	}
+
+	return addr4, nil
+}
 
 func IP4AddressToBytes(ip net.IP) [4]byte {
 	ip4 := ip.To4()
