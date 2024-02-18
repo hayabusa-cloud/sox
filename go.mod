@@ -1,5 +1,5 @@
 module hybscloud.com/sox
 
-go 1.20
+go 1.21
 
-require golang.org/x/sys v0.8.0
+require golang.org/x/sys v0.17.0
