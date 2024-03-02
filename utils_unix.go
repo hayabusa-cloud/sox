@@ -47,7 +47,7 @@ func errFromUnixErrno(err error) error {
 
 func ioVecFromBytesSlice(iov [][]byte) (addr uintptr, n int) {
 	vec := make([]unix.Iovec, len(iov))
-	for i := 0; i < len(iov); i++ {
+	for i := range len(iov) {
 		vec[i] = unix.Iovec{Base: &iov[i][0], Len: uint64(len(iov[i]))}
 	}
 	addr, n = uintptr(unsafe.Pointer(&iov)), len(iov)

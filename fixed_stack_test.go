@@ -36,7 +36,7 @@ func TestFixedStack_Series(t *testing.T) {
 			return
 		}
 		go func() {
-			for i := 0; i < (1 << 16); i++ {
+			for i := range 1 << 16 {
 				err := s.Push(i)
 				if err != nil {
 					t.Errorf("fixed stack push: %v", err)
@@ -50,10 +50,10 @@ func TestFixedStack_Series(t *testing.T) {
 			}
 		}()
 		stack, index, next := make([]int, 0), make([]int, 1<<16), 0
-		for i := 0; i < (1 << 16); i++ {
+		for i := range 1 << 16 {
 			index[i] = -1
 		}
-		for i := 0; i < (1 << 16); i++ {
+		for range 1 << 16 {
 			item, err := s.Pop()
 			if err != nil {
 				t.Errorf("fixed stack pop: %v", err)
@@ -91,7 +91,7 @@ func BenchmarkFixedStack_Parallel(b *testing.B) {
 	}
 	b.ResetTimer()
 	go func() {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			err := s.Push(i)
 			if err != nil {
 				b.Errorf("fixed stack push: %v", err)
@@ -104,7 +104,7 @@ func BenchmarkFixedStack_Parallel(b *testing.B) {
 			return
 		}
 	}()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err = s.Pop()
 		if err != nil {
 			b.Errorf("fixed stack pop: %v", err)
@@ -339,19 +339,19 @@ func testFixedStackNonblocking(t *testing.T, s sox.Stack[uintptr]) {
 func testFixedStackConcurrent(t *testing.T, s sox.Stack[int64], m int, n int) {
 	stack, index, next := make([][]int64, m), make([][]int, m), make([]int64, m)
 	locks := make([]sync.Mutex, m)
-	for i := 0; i < m; i++ {
+	for i := range m {
 		stack[i] = make([]int64, 0, n+1)
 		index[i] = make([]int, n)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			index[i][j] = -1
 		}
 		next[i] = 0
 	}
 	wg := sync.WaitGroup{}
-	for h := 0; h < m; h++ {
+	for range m {
 		wg.Add(1)
 		go func() {
-			for i := 0; i < n; i++ {
+			for range n {
 				item, err := s.Pop()
 				if err != nil {
 					t.Errorf("fixed stack pop: %v", err)
@@ -378,9 +378,9 @@ func testFixedStackConcurrent(t *testing.T, s sox.Stack[int64], m int, n int) {
 			wg.Done()
 		}()
 	}
-	for i := 0; i < m; i++ {
+	for i := range m {
 		go func(i int) {
-			for j := 0; j < n; j++ {
+			for j := range n {
 				err := s.Push(int64(i<<32) | int64(j))
 				if err != nil {
 					t.Errorf("fixed stack push: %v", err)
@@ -393,9 +393,9 @@ func testFixedStackConcurrent(t *testing.T, s sox.Stack[int64], m int, n int) {
 }
 
 func benchmarkFixedStackConcurrent(b *testing.B, s sox.Stack[int], m int) {
-	for i := 0; i < m; i++ {
+	for i := range m {
 		go func(i int) {
-			for j := 0; j < b.N/m+1; j++ {
+			for j := range b.N/m + 1 {
 				err := s.Push(j)
 				if err != nil {
 					b.Errorf("fixed stack push: %v", err)
@@ -405,10 +405,10 @@ func benchmarkFixedStackConcurrent(b *testing.B, s sox.Stack[int], m int) {
 		}(i)
 	}
 	wg := sync.WaitGroup{}
-	for i := 0; i < m; i++ {
+	for i := range m {
 		wg.Add(1)
 		go func(i int) {
-			for j := 0; j < b.N/m; j++ {
+			for range b.N / m {
 				_, err := s.Pop()
 				if err != nil {
 					b.Errorf("fixed stack pop: %v", err)

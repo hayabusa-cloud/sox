@@ -76,7 +76,7 @@ func TestRingQueue_Series(t *testing.T) {
 			return
 		}
 		go func() {
-			for i := 0; i < (1 << 20); i++ {
+			for i := range 1 << 20 {
 				err := p.Produce(i)
 				if err != nil {
 					t.Errorf("ring producer produce: %v", err)
@@ -89,7 +89,7 @@ func TestRingQueue_Series(t *testing.T) {
 				return
 			}
 		}()
-		for i := 0; i < (1<<20)-1; i++ {
+		for i := range (1 << 20) - 1 {
 			item, err := c.Consume()
 			if err != nil {
 				t.Errorf("ring consumer consume: %v", err)
@@ -129,7 +129,7 @@ func BenchmarkRingQueue_Parallel(b *testing.B) {
 	}
 	b.ResetTimer()
 	go func() {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			err := p.Produce(i)
 			if err != nil {
 				b.Errorf("ring producer produce: %v", err)
@@ -142,7 +142,7 @@ func BenchmarkRingQueue_Parallel(b *testing.B) {
 			return
 		}
 	}()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err = c.Consume()
 		if err != nil {
 			b.Errorf("ring consumer consume: %v", err)
@@ -622,12 +622,12 @@ func testRingQueueNonblocking(t *testing.T, c sox.ItemConsumer[uintptr], p sox.I
 
 func testRingQueueConcurrentProduce(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], m int, n int) {
 	last := make([]int64, m)
-	for i := 0; i < m; i++ {
+	for i := range m {
 		last[i] = -1
 	}
-	for i := 0; i < m; i++ {
+	for i := range m {
 		go func(i int) {
-			for j := 0; j < n; j++ {
+			for j := range n {
 				err := p.Produce(int64(i<<32) | int64(j))
 				if err != nil {
 					t.Errorf("ring producer produce: %v", err)
@@ -636,7 +636,7 @@ func testRingQueueConcurrentProduce(t *testing.T, c sox.ItemConsumer[int64], p s
 			}
 		}(i)
 	}
-	for i := 0; i < m*n; i++ {
+	for range m * n {
 		item, err := c.Consume()
 		if err != nil {
 			t.Errorf("ring consumer consume: %v", err)
@@ -662,9 +662,9 @@ func testRingQueueConcurrentProduce(t *testing.T, c sox.ItemConsumer[int64], p s
 }
 
 func benchmarkRingQueueConcurrentProduce(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], num int) {
-	for i := 0; i < num; i++ {
+	for range num {
 		go func() {
-			for j := 0; j < b.N/num+1; j++ {
+			for j := range b.N/num + 1 {
 				err := p.Produce(j)
 				if err != nil {
 					b.Errorf("ring producer produce: %v", err)
@@ -673,7 +673,7 @@ func benchmarkRingQueueConcurrentProduce(b *testing.B, c sox.ItemConsumer[int], 
 			}
 		}()
 	}
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := c.Consume()
 		if err != nil {
 			b.Errorf("ring consumer consume: %v", err)
@@ -684,11 +684,11 @@ func benchmarkRingQueueConcurrentProduce(b *testing.B, c sox.ItemConsumer[int], 
 
 func testRingQueueConcurrentConsume(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], m int, n int) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < m; i++ {
+	for range m {
 		wg.Add(1)
 		go func() {
 			last := int64(-1)
-			for j := 0; j < n; j++ {
+			for range n {
 				item, err := c.Consume()
 				if err != nil {
 					t.Errorf("ring consumer consume: %v", err)
@@ -703,7 +703,7 @@ func testRingQueueConcurrentConsume(t *testing.T, c sox.ItemConsumer[int64], p s
 			wg.Done()
 		}()
 	}
-	for i := 0; i < m*n; i++ {
+	for i := range m * n {
 		err := p.Produce(int64(i))
 		if err != nil {
 			t.Errorf("ring producer produce: %v", err)
@@ -725,10 +725,10 @@ func testRingQueueConcurrentConsume(t *testing.T, c sox.ItemConsumer[int64], p s
 
 func benchmarkRingQueueConcurrentConsume(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], num int) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < num; i++ {
+	for range num {
 		wg.Add(1)
 		go func() {
-			for j := 0; j < b.N/num; j++ {
+			for range b.N / num {
 				_, err := c.Consume()
 				if err != nil {
 					b.Errorf("ring consumer consume: %v", err)
@@ -738,7 +738,7 @@ func benchmarkRingQueueConcurrentConsume(b *testing.B, c sox.ItemConsumer[int], 
 			wg.Done()
 		}()
 	}
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		err := p.Produce(i)
 		if err != nil {
 			b.Errorf("ring producer produce: %v", err)
@@ -749,9 +749,9 @@ func benchmarkRingQueueConcurrentConsume(b *testing.B, c sox.ItemConsumer[int], 
 }
 
 func testRingQueueConcurrent(t *testing.T, c sox.ItemConsumer[int64], p sox.ItemProducer[int64], cNum, pNum int, n int) {
-	for i := 0; i < pNum; i++ {
+	for i := range pNum {
 		go func(i int) {
-			for j := 0; j < n; j++ {
+			for j := range n {
 				err := p.Produce(int64(i<<32) | int64(j))
 				if err != nil {
 					t.Errorf("ring producer produce: %v", err)
@@ -761,14 +761,14 @@ func testRingQueueConcurrent(t *testing.T, c sox.ItemConsumer[int64], p sox.Item
 		}(i)
 	}
 	wg := sync.WaitGroup{}
-	for i := 0; i < cNum; i++ {
+	for i := range cNum {
 		wg.Add(1)
 		go func(i int) {
 			last := make([]int64, pNum)
-			for j := 0; j < pNum; j++ {
+			for j := range pNum {
 				last[j] = -1
 			}
-			for j := 0; j < n*pNum/cNum; j++ {
+			for range n * pNum / cNum {
 				item, err := c.Consume()
 				if err != nil {
 					t.Errorf("ring consumer consume: %v", err)
@@ -798,9 +798,9 @@ func testRingQueueConcurrent(t *testing.T, c sox.ItemConsumer[int64], p sox.Item
 }
 
 func benchmarkRingQueueConcurrent(b *testing.B, c sox.ItemConsumer[int], p sox.ItemProducer[int], cNum, pNum int) {
-	for i := 0; i < pNum; i++ {
+	for i := range pNum {
 		go func(i int) {
-			for j := 0; j < b.N/pNum+1; j++ {
+			for j := range b.N/pNum + 1 {
 				err := p.Produce(j)
 				if err != nil {
 					b.Errorf("ring producer produce: %v", err)
@@ -810,10 +810,10 @@ func benchmarkRingQueueConcurrent(b *testing.B, c sox.ItemConsumer[int], p sox.I
 		}(i)
 	}
 	wg := sync.WaitGroup{}
-	for i := 0; i < cNum; i++ {
+	for i := range cNum {
 		wg.Add(1)
 		go func(i int) {
-			for j := 0; j < b.N/cNum; j++ {
+			for range b.N / cNum {
 				_, err := c.Consume()
 				if err != nil {
 					b.Errorf("ring consumer consume: %v", err)

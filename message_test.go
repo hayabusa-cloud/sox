@@ -90,7 +90,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -114,7 +114,7 @@ func TestMessage_ReadStream(t *testing.T) {
 		s := []byte{0x41, 0x42, 0x43}
 		h := [1]byte{byte(len(s))}
 		p := append(h[:], s...)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			p = append(p, p...)
 		}
 		go func() {
@@ -136,7 +136,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 1024; i++ {
+		for range 1024 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -189,7 +189,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -211,7 +211,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := []byte{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48}
-		for i := 0; i < 16; i++ {
+		for range 16 {
 			s = append(s, s...)
 		}
 		h := [8]byte{255, 0, 0, 0, 0, 0, 0, 0}
@@ -229,7 +229,7 @@ func TestMessage_ReadStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -298,7 +298,7 @@ func TestMessage_WriteStream(t *testing.T) {
 		s := []byte{0x41, 0x42, 0x43, 0x44}
 		go func() {
 			defer wr.Close()
-			for i := 0; i < 8; i++ {
+			for range 8 {
 				n, err := w.Write(s)
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -307,7 +307,7 @@ func TestMessage_WriteStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -338,12 +338,12 @@ func TestMessage_WriteStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := []byte{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48}
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			s = append(s, s...)
 		}
 		go func() {
 			defer wr.Close()
-			for i := 0; i < 8; i++ {
+			for range 8 {
 				n, err := w.Write(s)
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -352,7 +352,7 @@ func TestMessage_WriteStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -383,12 +383,12 @@ func TestMessage_WriteStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := []byte{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48}
-		for i := 0; i < 16; i++ {
+		for range 16 {
 			s = append(s, s...)
 		}
 		go func() {
 			defer wr.Close()
-			for i := 0; i < 8; i++ {
+			for range 8 {
 				n, err := w.Write(s)
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -397,7 +397,7 @@ func TestMessage_WriteStream(t *testing.T) {
 			}
 		}()
 		buf := make([]byte, len(s))
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -428,7 +428,7 @@ func TestMessage_PipeStream(t *testing.T) {
 		s := []byte{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48}
 		s = append(s, s...)
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s)
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -437,7 +437,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -464,11 +464,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [253]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -477,7 +477,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -504,11 +504,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [254]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -517,7 +517,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -544,11 +544,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [255]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -557,7 +557,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -584,11 +584,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [256]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -597,7 +597,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -624,11 +624,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [500]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -637,7 +637,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -664,11 +664,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [20000]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -677,7 +677,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -704,11 +704,11 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [100000]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				n, err := w.Write(s[:])
 				if err != nil {
 					t.Errorf("write %d byte(s): %v\n", n, err)
@@ -717,7 +717,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			n, err := r.Read(buf)
 			if err != nil {
 				t.Errorf("read %d byte(s): %v\n", n, err)
@@ -745,7 +745,7 @@ func TestMessage_PipeStream(t *testing.T) {
 			options.Nonblock = false
 		})
 		s := [64]byte{}
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			s[i] = 0x40 + byte(i&0xf)
 		}
 		go func() {
@@ -912,7 +912,7 @@ func BenchmarkMessage_Stream(b *testing.B) {
 func benchmarkMessageStream(b *testing.B, r io.Reader, w io.Writer, l int) {
 	wBuf, rBuf := make([]byte, l), make([]byte, l)
 	go func() {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			n, err := w.Write(wBuf)
 			if err != nil {
 				b.Errorf("write %d byte(s): %v\n", n, err)
@@ -922,7 +922,7 @@ func benchmarkMessageStream(b *testing.B, r io.Reader, w io.Writer, l int) {
 	}()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		n, err := r.Read(rBuf)
 		if err != nil {
 			b.Errorf("read %d byte(s): %v\n", n, err)

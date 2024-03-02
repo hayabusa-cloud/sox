@@ -32,7 +32,7 @@ func TestAlignedMemBlocks(t *testing.T) {
 	t.Run("multiple", func(t *testing.T) {
 		const n = 1024
 		blocks := sox.AlignedMemBlocks(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			b := blocks[i]
 			if len(b) != os.Getpagesize() {
 				t.Errorf("expected slice len %d but got %d", os.Getpagesize(), len(b))

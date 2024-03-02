@@ -55,7 +55,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("level 0", func(t *testing.T) {
 		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelClient)
 		total := 0
-		for i := 0; i < 1<<4; i++ {
+		for range 1 << 4 {
 			if sw.WillYield() {
 				total++
 			}
@@ -69,7 +69,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("level 1", func(t *testing.T) {
 		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelBlockingIO)
 		total := 0
-		for i := 0; i < 1<<5; i++ {
+		for range 1 << 5 {
 			if sw.WillYield() {
 				total++
 			}
@@ -83,7 +83,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("level 2", func(t *testing.T) {
 		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume)
 		total := 0
-		for i := 0; i < 1<<7; i++ {
+		for range 1 << 7 {
 			if sw.WillYield() {
 				total++
 			}
@@ -97,7 +97,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("level 3", func(t *testing.T) {
 		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 1)
 		total := 0
-		for i := 0; i < 1<<10; i++ {
+		for range 1 << 10 {
 			if sw.WillYield() {
 				total++
 			}
@@ -111,7 +111,7 @@ func TestSpinWaiter(t *testing.T) {
 	t.Run("level 4", func(t *testing.T) {
 		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 2)
 		total := 0
-		for i := 0; i < 1<<14; i++ {
+		for range 1 << 14 {
 			if sw.WillYield() {
 				total++
 			}

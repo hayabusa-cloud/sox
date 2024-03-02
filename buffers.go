@@ -25,7 +25,7 @@ func AlignedMemBlocks(n int) (blocks [][]byte) {
 	p := make([]byte, size*(n+1))
 	ptr := uintptr(unsafe.Pointer(&p[0]))
 	off := ptr - (ptr & ^(uintptr(size) - 1))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		blocks[i] = unsafe.Slice(&p[i*size-int(off)], size)
 	}
 	return
@@ -42,7 +42,7 @@ func NewBuffers(n int, size int) Buffers {
 		return Buffers{}
 	}
 	ret := make(Buffers, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if size > 0 {
 			ret[i] = make([]byte, size)
 		} else {
