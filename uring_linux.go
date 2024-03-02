@@ -78,6 +78,10 @@ const (
 )
 
 const (
+	IO_URING_OP_SUPPORTED = 1 << 0
+)
+
+const (
 	ioUringDefaultEntries = 0x2000
 
 	ioUringDefaultSqThreadCPU  = 1
@@ -91,6 +95,7 @@ type ioUring struct {
 	sqLock atomic.Bool
 	cq     ioUringCq
 	ringFd int
+	ops    []ioUringProbeOp
 	bufs   Buffers
 }
 
@@ -155,6 +160,23 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	uring.cq.cqes = unsafe.Slice((*ioUringCqe)(unsafe.Pointer(ptr+uintptr(params.cqOff.cqes))), int(params.cqEntries))
 
 	return uring, nil
+}
+
+func (ur *ioUring) registerProbe(probe *ioUringProbe) error {
+	addr, n := uintptr(unsafe.Pointer(probe)), uintptr(len(probe.ops))
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_PROBE, addr, n, 0, 0)
+	if errno != 0 {
+		return errFromUnixErrno(errno)
+	}
+	ur.ops = make([]ioUringProbeOp, 0, probe.opsLen)
+	for i := range probe.opsLen {
+		if probe.ops[i].flags&IO_URING_OP_SUPPORTED < IO_URING_OP_SUPPORTED {
+			continue
+		}
+		ur.ops = append(ur.ops, probe.ops[i])
+	}
+
+	return nil
 }
 
 func (ur *ioUring) registerBuffers(n, size int) error {
@@ -280,6 +302,21 @@ func (ur *ioUring) wait() (*ioUringCqe, error) {
 	}
 
 	return nil, ErrTemporarilyUnavailable
+}
+
+type ioUringProbe struct {
+	lastOp uint8
+	opsLen uint8
+	resv   uint16
+	resv2  [3]uint32
+	ops    [256]ioUringProbeOp
+}
+
+type ioUringProbeOp struct {
+	op    uint8
+	resv  uint8
+	flags uint16
+	resv2 uint32
 }
 
 type ioUringSq struct {
