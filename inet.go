@@ -13,10 +13,13 @@ import (
 )
 
 var (
-	IPv4LoopBack = net.IPv4(127, 0, 0, 1)
-	IPv6LoopBack = net.IPv6loopback
+	IPV4zero        = net.IPv4zero
+	IPV6unspecified = net.IPv6unspecified
+	IPv4LoopBack    = net.IPv4(127, 0, 0, 1)
+	IPv6LoopBack    = net.IPv6loopback
 )
 
+type IP = net.IP
 type IPAddr = net.IPAddr
 type TCPAddr = net.TCPAddr
 type UDPAddr = net.UDPAddr
@@ -109,6 +112,18 @@ func ResolveSCTPAddr(network, address string) (*SCTPAddr, error) {
 	}
 
 	return addr4, nil
+}
+
+func IPAddrFromTCPAddr(addr *TCPAddr) *IPAddr {
+	return &IPAddr{IP: addr.IP, Zone: addr.Zone}
+}
+
+func IPAddrFromUDPAddr(addr *UDPAddr) *IPAddr {
+	return &IPAddr{IP: addr.IP, Zone: addr.Zone}
+}
+
+func IPAddrFromSCTPAddr(addr *SCTPAddr) *IPAddr {
+	return &IPAddr{IP: addr.IP, Zone: addr.Zone}
 }
 
 func IP4AddressToBytes(ip net.IP) [4]byte {

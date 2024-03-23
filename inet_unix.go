@@ -128,11 +128,40 @@ func ip4AddrToSockaddr(addr *IPAddr) unix.Sockaddr {
 	}
 }
 
+func ip4AddrPortToSockaddr(addr *IPAddr, port int) unix.Sockaddr {
+	return &unix.SockaddrInet4{
+		Port: port,
+		Addr: IP4AddressToBytes(addr.IP),
+	}
+}
+
 func ip6AddrToSockaddr(addr *IPAddr) unix.Sockaddr {
 	return &unix.SockaddrInet6{
 		ZoneId: uint32(ip6ZoneID(addr.Zone)),
 		Addr:   IP6AddressToBytes(addr.IP),
 	}
+}
+
+func ip6AddrPortToSockaddr(addr *IPAddr, port int) unix.Sockaddr {
+	return &unix.SockaddrInet6{
+		Port:   port,
+		ZoneId: uint32(ip6ZoneID(addr.Zone)),
+		Addr:   IP6AddressToBytes(addr.IP),
+	}
+}
+
+func ipAddrToSockaddr(addr *IPAddr) unix.Sockaddr {
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		return ip4AddrToSockaddr(addr)
+	}
+	return ip6AddrToSockaddr(addr)
+}
+
+func ipAddrPortToSockaddr(addr *IPAddr, port int) unix.Sockaddr {
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		return ip4AddrPortToSockaddr(addr, port)
+	}
+	return ip6AddrPortToSockaddr(addr, port)
 }
 
 func tcp4AddrToSockaddr(addr *TCPAddr) unix.Sockaddr {
@@ -150,6 +179,10 @@ func tcp6AddrToSockaddr(addr *TCPAddr) unix.Sockaddr {
 	}
 }
 
+func tcpAddrToSockaddr(addr *TCPAddr) unix.Sockaddr {
+	return ipAddrPortToSockaddr(IPAddrFromTCPAddr(addr), addr.Port)
+}
+
 func udp4AddrToSockaddr(addr *UDPAddr) unix.Sockaddr {
 	return &unix.SockaddrInet4{
 		Port: addr.Port,
@@ -158,12 +191,15 @@ func udp4AddrToSockaddr(addr *UDPAddr) unix.Sockaddr {
 }
 
 func udp6AddrToSockaddr(addr *UDPAddr) unix.Sockaddr {
-
 	return &unix.SockaddrInet6{
 		Port:   addr.Port,
 		ZoneId: uint32(ip6ZoneID(addr.Zone)),
 		Addr:   IP6AddressToBytes(addr.IP),
 	}
+}
+
+func udpAddrToSockaddr(addr *UDPAddr) unix.Sockaddr {
+	return ipAddrPortToSockaddr(IPAddrFromUDPAddr(addr), addr.Port)
 }
 
 func sctp4AddrToSockaddr(addr *SCTPAddr) unix.Sockaddr {
@@ -178,6 +214,25 @@ func sctp6AddrToSockaddr(addr *SCTPAddr) unix.Sockaddr {
 		Port:   addr.Port,
 		ZoneId: uint32(ip6ZoneID(addr.Zone)),
 		Addr:   IP6AddressToBytes(addr.IP),
+	}
+}
+
+func sctpAddrToSockaddr(addr *SCTPAddr) unix.Sockaddr {
+	return ipAddrPortToSockaddr(IPAddrFromSCTPAddr(addr), addr.Port)
+}
+
+func inetAddrToSockaddr(addr Addr) unix.Sockaddr {
+	switch addr := addr.(type) {
+	case *IPAddr:
+		return ipAddrToSockaddr(addr)
+	case *TCPAddr:
+		return tcpAddrToSockaddr(addr)
+	case *UDPAddr:
+		return udpAddrToSockaddr(addr)
+	case *SCTPAddr:
+		return sctpAddrToSockaddr(addr)
+	default:
+		panic("addr must be an internet address")
 	}
 }
 
