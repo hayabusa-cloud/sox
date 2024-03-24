@@ -11,6 +11,7 @@ import (
 	"hybscloud.com/sox"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestSignalFile(t *testing.T) {
@@ -24,6 +25,7 @@ func TestSignalFile(t *testing.T) {
 		return
 	}
 	go func() {
+		time.Sleep(200 * time.Millisecond)
 		_ = unix.Kill(os.Getpid(), unix.SIGINT)
 	}()
 	sig, _, err := s.ReadSiginfo()
