@@ -10,6 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	defaultBacklog = 511
+)
+
 type socket struct {
 	network NetworkType
 	fd      int
@@ -87,4 +91,36 @@ func (so *socket) Write(b []byte) (n int, err error) {
 
 func (so *socket) Close() error {
 	return unix.Close(so.fd)
+}
+
+func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
+	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+		nfd, sa, err = unix.Accept4(fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
+		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+			continue
+		}
+		if err != nil {
+			return 0, nil, errFromUnixErrno(err)
+		}
+		break
+	}
+	return
+}
+
+func connectWait(fd int, sa unix.Sockaddr) error {
+	if err := unix.Connect(fd, sa); err == nil {
+		return nil
+	} else if err != unix.EINPROGRESS {
+		return errFromUnixErrno(err)
+	}
+	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
+		val, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ERROR)
+		if err != nil {
+			return errFromUnixErrno(err)
+		}
+		if val == 0 {
+			break
+		}
+	}
+	return nil
 }

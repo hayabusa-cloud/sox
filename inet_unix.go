@@ -14,42 +14,6 @@ import (
 	"unsafe"
 )
 
-const (
-	defaultBacklog = 511
-)
-
-func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
-		nfd, sa, err = unix.Accept4(fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
-		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
-			continue
-		}
-		if err != nil {
-			return 0, nil, errFromUnixErrno(err)
-		}
-		break
-	}
-	return
-}
-
-func connectWait(fd int, sa unix.Sockaddr) error {
-	if err := unix.Connect(fd, sa); err == nil {
-		return nil
-	} else if err != unix.EINPROGRESS {
-		return errFromUnixErrno(err)
-	}
-	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
-		val, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ERROR)
-		if err != nil {
-			return errFromUnixErrno(err)
-		}
-		if val == 0 {
-			break
-		}
-	}
-	return nil
-}
-
 func inetAddrFromAddrPort(addrPort netip.AddrPort) unix.Sockaddr {
 	if addrPort.Addr().Is4() {
 		return &unix.SockaddrInet4{
