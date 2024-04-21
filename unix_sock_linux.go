@@ -50,6 +50,14 @@ func (so *UnixSocket) Protocol() UnderlyingProtocol {
 	return UnderlyingProtocolSeqPacket
 }
 
+func (so *UnixSocket) Shutdown(how int) error {
+	err := unix.Shutdown(so.fd, how)
+	if err != nil {
+		return errFromUnixErrno(err)
+	}
+	return nil
+}
+
 type UnixConn struct {
 	*UnixSocket
 	laddr *UnixAddr

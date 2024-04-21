@@ -11,6 +11,12 @@ import (
 )
 
 const (
+	SockShutdownRead      = unix.SHUT_RD
+	SockShutdownWrite     = unix.SHUT_WR
+	SockShutdownReadWrite = unix.SHUT_RDWR
+)
+
+const (
 	defaultBacklog = 511
 )
 

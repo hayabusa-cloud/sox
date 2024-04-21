@@ -66,6 +66,14 @@ func (so *SCTPSocket) Protocol() UnderlyingProtocol {
 	return UnderlyingProtocolSeqPacket
 }
 
+func (so *SCTPSocket) Shutdown(how int) error {
+	err := unix.Shutdown(so.fd, how)
+	if err != nil {
+		return errFromUnixErrno(err)
+	}
+	return nil
+}
+
 type SCTPConn struct {
 	*SCTPSocket
 	laddr *SCTPAddr

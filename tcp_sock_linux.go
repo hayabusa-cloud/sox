@@ -54,6 +54,14 @@ func (so *TCPSocket) Protocol() UnderlyingProtocol {
 	return UnderlyingProtocolStream
 }
 
+func (so *TCPSocket) Shutdown(how int) error {
+	err := unix.Shutdown(so.fd, how)
+	if err != nil {
+		return errFromUnixErrno(err)
+	}
+	return nil
+}
+
 type TCPConn struct {
 	*TCPSocket
 	laddr *TCPAddr
