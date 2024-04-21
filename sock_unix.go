@@ -8,6 +8,7 @@ package sox
 
 import (
 	"golang.org/x/sys/unix"
+	"unsafe"
 )
 
 const (
@@ -127,6 +128,19 @@ func connectWait(fd int, sa unix.Sockaddr) error {
 		if val == 0 {
 			break
 		}
+	}
+	return nil
+}
+
+func getSockOptWait(fd int, level int, opt int, optVal unsafe.Pointer, optLen unsafe.Pointer) error {
+	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
+		_, _, errno := unix.Syscall6(unix.SYS_GETSOCKOPT, uintptr(fd), uintptr(level), uintptr(opt), uintptr(optVal), uintptr(optLen), 0)
+		if errno == 0 {
+			break
+		} else if errno == unix.EINPROGRESS {
+			continue
+		}
+		return errFromUnixErrno(errno)
 	}
 	return nil
 }
