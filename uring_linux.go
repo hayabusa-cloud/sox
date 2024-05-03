@@ -10,7 +10,6 @@ import (
 	"context"
 	"golang.org/x/sys/unix"
 	"sync/atomic"
-	"syscall"
 	"time"
 	"unsafe"
 )
@@ -38,6 +37,7 @@ const (
 const (
 	IORING_SQ_NEED_WAKEUP = 1 << iota
 	IORING_SQ_CQ_OVERFLOW
+	IORING_SQ_TASKRUN
 )
 
 const (
@@ -46,6 +46,31 @@ const (
 	IOSQE_IO_LINK
 	IOSQE_IO_HARDLINK
 	IOSQE_ASYNC
+	IOSQE_BUFFER_SELECT
+	IOSQE_CQE_SKIP_SUCCESS
+)
+
+const (
+	IORING_POLL_ADD_MULTI = 1 << iota
+	IORING_POLL_UPDATE_EVENTS
+	IORING_POLL_UPDATE_USER_DATA
+	IORING_POLL_ADD_LEVEL
+)
+
+const (
+	IORING_ASYNC_CANCEL_ALL = 1 << iota
+	IORING_ASYNC_CANCEL_FD
+	IORING_ASYNC_CANCEL_ANY
+	IORING_ASYNC_CANCEL_FD_FIXED
+	IORING_ASYNC_CANCEL_USERDATA
+	IORING_ASYNC_CANCEL_OP
+)
+
+const (
+	IORING_CQE_F_BUFFER = 1 << iota
+	IORING_CQE_F_MORE
+	IORING_CQE_F_SOCK_NONEMPTY
+	IORING_CQE_F_NOTIF
 )
 
 const (
@@ -97,6 +122,16 @@ type ioUring struct {
 	ringFd int
 	ops    []ioUringProbeOp
 	bufs   Buffers
+}
+
+type ioUringCtx struct {
+	context.Context
+	op    uint8
+	flags uint8
+}
+
+func (ctx *ioUringCtx) getOp() (uint8, uint8) {
+	return ctx.op, ctx.flags
 }
 
 func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, error) {
@@ -183,7 +218,7 @@ func (ur *ioUring) registerBuffers(n, size int) error {
 	if ur.bufs != nil && len(ur.bufs) > 0 {
 		panic("io-uring buffers already registered")
 	}
-	if n < 1 || size < 1 || n != n&(n-1) || size != size&(size-1) {
+	if n < 1 || size < 1 || 0 != n&(n-1) || 0 != size&(size-1) {
 		return ErrInvalidParam
 	}
 	ur.bufs = NewBuffers(n, size)
@@ -228,7 +263,7 @@ func (ur *ioUring) registerPoller(p *epoll) (int, error) {
 	return efd, nil
 }
 
-func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
+func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUringSqe)) error {
 	sw := SpinWait{}
 	for {
 		if ur.sqLock.CompareAndSwap(false, true) {
@@ -245,18 +280,47 @@ func (ur *ioUring) submit(ctx context.Context, op uint8, fd int, off uint64, add
 
 	e := &ur.sq.sqes[t&*ur.sq.kRingMask]
 	e.opcode = op
-	e.flags = IOSQE_ASYNC
-	e.fd = int32(fd)
-	e.off = off
-	e.addr = addr
-	e.len = uint32(n)
-	e.uflags = uflags
-	e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
+	e.flags = flags
+	fn(e)
+	userData := ioUringCtx{Context: ctx, op: op, flags: flags}
+	e.userData = uint64(uintptr(unsafe.Pointer(&userData)))
 
 	ur.sq.array[t&*ur.sq.kRingMask] = t & *ur.sq.kRingMask
 	*ur.sq.kTail++
 
 	return nil
+}
+
+func (ur *ioUring) submit3(ctx context.Context, op uint8, flags uint8, fd int, addr uint64, n int) error {
+	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+		e.fd = int32(fd)
+		e.addr = addr
+		e.len = uint32(n)
+	})
+}
+
+func (ur *ioUring) submit6(ctx context.Context, op uint8, flags uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
+	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+		e.fd = int32(fd)
+		e.off = off
+		e.addr = addr
+		e.len = uint32(n)
+		e.uflags = uflags
+	})
+}
+
+func (ur *ioUring) submit9(ctx context.Context, op uint8, flags uint8, fd int, off uint64, spliceOffIn uint64, n int, uflags uint32, bufGroup uint16, personality uint16, spliceFdIn int) error {
+	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+		e.fd = int32(fd)
+		e.off = off
+		e.addr = spliceOffIn
+		e.len = uint32(n)
+		e.uflags = uflags
+		e.userData = uint64(uintptr(unsafe.Pointer(&ctx)))
+		e.bufIndex = bufGroup
+		e.personality = personality
+		e.spliceFdIn = int32(spliceFdIn)
+	})
 }
 
 func (ur *ioUring) enter() error {
@@ -369,7 +433,7 @@ func (cqe *ioUringCqe) Context() context.Context {
 	if cqe.userData == 0 {
 		return context.Background()
 	}
-	return *(*context.Context)(unsafe.Pointer(uintptr(cqe.userData)))
+	return (*ioUringCtx)(unsafe.Pointer(uintptr(cqe.userData)))
 }
 
 type ioSqRingOffsets struct {
@@ -420,7 +484,7 @@ var (
 )
 
 func ioUringSetup(entries uint32, params *ioUringParams) (fd int, err error) {
-	r1, _, errno := syscall.Syscall(
+	r1, _, errno := unix.Syscall(
 		unix.SYS_IO_URING_SETUP,
 		uintptr(entries),
 		uintptr(unsafe.Pointer(params)),

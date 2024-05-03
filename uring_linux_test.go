@@ -45,7 +45,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		payload := AlignedMemBlock()
-		err = ur.read(context.TODO(), int(f.Fd()), payload)
+		err = ur.read(context.TODO(), 0, int(f.Fd()), payload)
 		if err != nil {
 			t.Errorf("submission readv: %v", err)
 			return
@@ -105,7 +105,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		s := "test0123456789"
 		payload := AlignedMemBlock()
 		copy(payload, s)
-		err = ur.write(context.TODO(), int(f.Fd()), payload, len(payload))
+		err = ur.write(context.TODO(), 0, int(f.Fd()), payload, len(payload))
 		if err != nil {
 			t.Errorf("submission write: %v", err)
 			return
@@ -181,7 +181,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		rb := make([]byte, len(wb))
-		err = ur.receive(context.TODO(), so[0].fd, rb)
+		err = ur.receive(context.TODO(), 0, so[0].fd, rb)
 		if err != nil {
 			t.Errorf("submit recv: %v", err)
 			return
@@ -239,7 +239,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		wb := []byte("test0123456789")
-		err = ur.send(context.TODO(), so[1].fd, wb)
+		err = ur.send(context.TODO(), 0, so[1].fd, wb)
 		if err != nil {
 			t.Errorf("submit send: %v", err)
 			return
@@ -419,5 +419,3 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		fw(t, ur)
 	})
 }
-
-func TestIoUring_IOOperations(t *testing.T) {}
