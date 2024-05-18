@@ -21,13 +21,13 @@ func TestTimer_Tick(t *testing.T) {
 		defer tm.Close()
 
 		tfd := tm.(*timerfd)
-		time.Sleep(d + jiffies)
+		time.Sleep(d + jiffy)
 		_, err = tfd.Read(tfd.buf)
 		if err != nil {
 			t.Errorf("timerfd refresh: %v", err)
 			return
 		}
-		if tm.Now().Sub(time.Now()).Abs() >= d/2+jiffies {
+		if tm.Now().Sub(time.Now()).Abs() >= d/2+jiffy {
 			t.Errorf("too large time difference")
 			return
 		}

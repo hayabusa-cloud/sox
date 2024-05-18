@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const jiffies = time.Millisecond
+const jiffy = time.Millisecond
 
 type Timer interface {
 	Now() time.Time

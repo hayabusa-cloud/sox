@@ -13,8 +13,8 @@ import (
 
 const (
 	procYieldCycles          = 30
-	spinWaitDurationBlocking = max(jiffies, 4*time.Millisecond)
-	spinWaitDurationPending  = min(jiffies, time.Millisecond)
+	spinWaitDurationBlocking = max(jiffy, 4*time.Millisecond)
+	spinWaitDurationPending  = min(jiffy, time.Millisecond)
 )
 
 // SpinWait is a lightweight synchronization type that
