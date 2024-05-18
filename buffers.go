@@ -54,15 +54,59 @@ func NewBuffers(n int, size int) Buffers {
 }
 
 const (
-	_ = 1 << (iota * 3)
+	_ = 1 << (iota * 2)
+	_
+
+	// BufferSizePico represents the size of a pico buffer
 	BufferSizePico
+
+	// BufferSizeNano represents the size of a nano buffer.
 	BufferSizeNano
+
+	// BufferSizeMicro represents the size of a micro buffer.
 	BufferSizeMicro
+
+	// BufferSizeSmall represents the size of a small buffer.
 	BufferSizeSmall
+
+	// BufferSizeMedium represents the size of a medium buffer.
 	BufferSizeMedium
+
+	// BufferSizeLarge represents the size of a large buffer.
 	BufferSizeLarge
+
+	// BufferSizeHuge represents the size of a huge buffer.
 	BufferSizeHuge
+
+	// BufferSizeGiant represents the size of a giant buffer.
+	BufferSizeGiant
+
+	bufferSizeDefault = BufferSizeMedium
 )
+
+// NewPicoBuffer returns a new PicoBuffer.
+func NewPicoBuffer() PicoBuffer { return PicoBuffer{} }
+
+// NewNanoBuffer returns a new instance of NanoBuffer.
+func NewNanoBuffer() NanoBuffer { return NanoBuffer{} }
+
+// NewMicroBuffer returns a new instance of MicroBuffer.
+func NewMicroBuffer() MicroBuffer { return MicroBuffer{} }
+
+// NewSmallBuffer returns a new instance of SmallBuffer.
+func NewSmallBuffer() SmallBuffer { return SmallBuffer{} }
+
+// NewMediumBuffer returns a new instance of MediumBuffer.
+func NewMediumBuffer() MediumBuffer { return MediumBuffer{} }
+
+// NewLargeBuffer returns a new instance of LargeBuffer.
+func NewLargeBuffer() LargeBuffer { return LargeBuffer{} }
+
+// NewHugeBuffer returns a new instance of HugeBuffer.
+func NewHugeBuffer() HugeBuffer { return HugeBuffer{} }
+
+// NewGiantBuffer returns a new instance of GiantBuffer.
+func NewGiantBuffer() GiantBuffer { return GiantBuffer{} }
 
 // PicoBuffer represents a byte array with size of BufferSizePico
 type PicoBuffer [BufferSizePico]byte
@@ -99,6 +143,11 @@ type HugeBuffer [BufferSizeHuge]byte
 
 func (b HugeBuffer) Reset() {}
 
+// GiantBuffer represents a byte array with size of BufferSizeGiant
+type GiantBuffer [BufferSizeGiant]byte
+
+func (b GiantBuffer) Reset() {}
+
 func picoArrayFromSlice(s []byte, offset int64) PicoBuffer {
 	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(s)), offset)
 	return *(*[BufferSizePico]byte)(ptr)
@@ -126,6 +175,11 @@ func largeArrayFromSlice(s []byte, offset int64) LargeBuffer {
 func hugeArrayFromSlice(s []byte, offset int64) HugeBuffer {
 	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(s)), offset)
 	return *(*[BufferSizeHuge]byte)(ptr)
+}
+
+func giantArrayFromSlice(s []byte, offset int64) GiantBuffer {
+	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(s)), offset)
+	return *(*[BufferSizeGiant]byte)(ptr)
 }
 
 func sliceOfPicoArray(s []byte, offset int64, n int) []PicoBuffer {
@@ -208,6 +262,18 @@ func sliceOfHugeArray(s []byte, offset int64, n int) []HugeBuffer {
 	for i := range n {
 		ret[i] = hugeArrayFromSlice(s, offset)
 		offset += BufferSizeHuge
+	}
+
+	return ret
+}
+func sliceOfGiantArray(s []byte, offset int64, n int) []GiantBuffer {
+	if n < 1 {
+		panic("bad array num")
+	}
+	ret := make([]GiantBuffer, n)
+	for i := range n {
+		ret[i] = giantArrayFromSlice(s, offset)
+		offset += BufferSizeGiant
 	}
 
 	return ret
