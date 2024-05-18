@@ -200,7 +200,7 @@ func (msg *message) close() error {
 			msg.done = true
 			return nil
 		}
-		sw.OnceWithLevel(spinWaitLevelAtomic)
+		sw.OnceWithLevel(SpinWaitLevelPreempting)
 	}
 
 	return nil

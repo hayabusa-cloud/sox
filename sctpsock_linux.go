@@ -275,7 +275,7 @@ func sctpBindx(so *SCTPSocket, sa unix.Sockaddr) error {
 }
 
 func sctpAcceptWait(lis *SCTPListener) (nfd int, sa unix.Sockaddr, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 		nfd, sa, err = unix.Accept4(lis.fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
 		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 			continue

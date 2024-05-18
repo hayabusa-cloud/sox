@@ -77,6 +77,8 @@ type FixedStackOptions struct {
 }
 
 type fixedStack[T any] struct {
+	_ noCopy
+
 	*FixedStackOptions
 	stack []T
 	top   atomic.Uint32
@@ -90,8 +92,11 @@ func newFixedStack[T any](stack []T, opt *FixedStackOptions) *fixedStack[T] {
 	}
 }
 
+// Push adds an item to the Stack.
+// If the stack is full, it will either return an error or wait if nonblocking is false.
+// If the stack is closed, it returns io.ErrClosedPipe.
 func (s *fixedStack[T]) Push(item T) error {
-	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {
@@ -115,8 +120,11 @@ func (s *fixedStack[T]) Push(item T) error {
 	return nil
 }
 
+// Pop removes and returns the top item from the Stack.
+// If the stack is empty, it will either return an error or wait if nonblocking is false.
+// If the stack is closed, it returns io.EOF.
 func (s *fixedStack[T]) Pop() (item T, err error) {
-	sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackTopValueMask <= 0 {
@@ -136,8 +144,9 @@ func (s *fixedStack[T]) Pop() (item T, err error) {
 	return item, nil
 }
 
+// Close closes the Stack
 func (s *fixedStack[T]) Close() error {
-	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {
@@ -162,6 +171,8 @@ const (
 )
 
 type fixedStackConcurrent[T any] struct {
+	_ noCopy
+
 	*FixedStackOptions
 	stack []T
 	top   atomic.Uint32
@@ -175,8 +186,15 @@ func newFixedStackConcurrent[T any](stack []T, opt *FixedStackOptions) *fixedSta
 	}
 }
 
+// Push adds an item to the Stack.
+//
+// If the stack is closed, it returns io.ErrClosedPipe.
+// If the stack is full and nonblocking is set to true,
+// it will return ErrTemporarilyUnavailable.
+//
+// The Stack implementation is thread-safe for concurrent calls to Push and Pop methods.
 func (s *fixedStackConcurrent[T]) Push(item T) error {
-	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackStatusWriting == fixedStackStatusWriting {
@@ -206,8 +224,15 @@ func (s *fixedStackConcurrent[T]) Push(item T) error {
 	return nil
 }
 
+// Pop removes and returns the top item from the Stack.
+//
+// If the Stack is empty and nonblocking is set to true, it will return a zero value
+// and ErrTemporarilyUnavailable. If the Stack is closed, it returns a zero value
+// and io.EOF. If the Stack is not empty, it removes the top item and returns it.
+//
+// The Stack implementation is thread-safe for concurrent calls to Push and Pop methods.
 func (s *fixedStackConcurrent[T]) Pop() (item T, err error) {
-	sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackTopValueMask <= 0 {
@@ -237,8 +262,13 @@ func (s *fixedStackConcurrent[T]) Pop() (item T, err error) {
 	return item, nil
 }
 
+// Close closes the Stack.
+//
+// If the Stack is already closed, it returns nil.
+// If there is a writer currently writing to the Stack,
+// it will wait until the writer finishes before closing the stack.
 func (s *fixedStackConcurrent[T]) Close() error {
-	sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce)
+	sw := NewSpinWaitWithLevel(SpinWaitLevelPending)
 	for {
 		top := s.top.Load()
 		if top&fixedStackStatusClosed == fixedStackStatusClosed {

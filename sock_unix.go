@@ -12,8 +12,20 @@ import (
 )
 
 const (
-	SockShutdownRead      = unix.SHUT_RD
-	SockShutdownWrite     = unix.SHUT_WR
+
+	// SockShutdownRead is a constant that represents the action of shutting down
+	// the reading side of a socket. It is used in conjunction with the unix.SHUT_RD
+	// constant to specify the shutdown action.
+	SockShutdownRead = unix.SHUT_RD
+
+	// SockShutdownWrite represents a constant that is used to shutdown the write
+	// function of a socket. It is typically used with the SockShutdown function
+	// in the unix package.
+	SockShutdownWrite = unix.SHUT_WR
+
+	// SockShutdownReadWrite is a constant that represents the value `unix.SHUT_RDWR`.
+	// It can be used to specify shutting down both the reading and writing operations
+	// of a socket.
 	SockShutdownReadWrite = unix.SHUT_RDWR
 )
 
@@ -101,7 +113,7 @@ func (so *socket) Close() error {
 }
 
 func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 		nfd, sa, err = unix.Accept4(fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
 		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 			continue

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func TestSpinWaiter(t *testing.T) {
+func TestParamSpinWait(t *testing.T) {
 	fn := func(x *atomic.Int32) {
 		for {
 			val := x.Load()
@@ -53,7 +53,7 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 0", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelClient)
+		sw := sox.NewSpinWaitWithLevel(sox.SpinWaitLevelBlocking)
 		total := 0
 		for range 1 << 4 {
 			if sw.WillYield() {
@@ -67,63 +67,36 @@ func TestSpinWaiter(t *testing.T) {
 	})
 
 	t.Run("level 1", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelBlockingIO)
+		sw := sox.NewSpinWaitWithLevel(sox.SpinWaitLevelPending)
 		total := 0
-		for range 1 << 5 {
+		for range 1 << 6 {
 			if sw.WillYield() {
 				total++
 			}
 			sw.Once()
 		}
-		if total <= 1<<4 {
-			t.Errorf("expected total wait>%d but got %d", 1<<4, total)
+		if 1<<3 > total && total <= 1<<4 {
+			t.Errorf("expected total wait between %d and %d but got %d", 1<<3, 1<<4, total)
 		}
 	})
 
 	t.Run("level 2", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume)
+		sw := sox.NewSpinWaitWithLevel(sox.SpinWaitLevelPreempting)
 		total := 0
-		for range 1 << 7 {
+		for range 1 << 8 {
 			if sw.WillYield() {
 				total++
 			}
 			sw.Once()
 		}
-		if total <= 1<<6 {
-			t.Errorf("expected total wait>%d but got %d", 1<<6, total)
-		}
-	})
-
-	t.Run("level 3", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 1)
-		total := 0
-		for range 1 << 10 {
-			if sw.WillYield() {
-				total++
-			}
-			sw.Once()
-		}
-		if total <= 1<<9 || total >= 1<<10 {
-			t.Errorf("expected total wait between %d and %d but got %d", 1<<9, 1<<10, total)
-		}
-	})
-
-	t.Run("level 4", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLevel(sox.SpinWaitLevelConsume + 2)
-		total := 0
-		for range 1 << 14 {
-			if sw.WillYield() {
-				total++
-			}
-			sw.Once()
-		}
-		if total <= 1<<13 || total >= 1<<14 {
-			t.Errorf("expected total wait between %d and %d but got %d", 1<<13, 1<<14, total)
+		if total > 1 {
+			t.Errorf("expected total wait<=%d but got %d", 1, total)
 		}
 	})
 
 	t.Run("timeout", func(t *testing.T) {
-		sw := sox.NewParamSpinWait().SetLimit(128)
+		sw := sox.NewParamSpinWait()
+		sw.SetLimit(128)
 		cnt := 0
 		for ; !sw.Closed(); sw.Once() {
 			cnt++

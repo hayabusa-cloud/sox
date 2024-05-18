@@ -85,6 +85,8 @@ type RingQueueOptions struct {
 }
 
 type ringQueue[T any] struct {
+	_ noCopy
+
 	*RingQueueOptions
 	ring                 []T
 	capacity, head, tail uint32
@@ -103,7 +105,7 @@ func newRingQueue[T any](opt *RingQueueOptions) *ringQueue[T] {
 }
 
 func (rq *ringQueue[T]) Produce(item T) error {
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); sw.Once() {
 		if rq.closed {
 			return io.ErrClosedPipe
 		}
@@ -122,7 +124,7 @@ func (rq *ringQueue[T]) Produce(item T) error {
 }
 
 func (rq *ringQueue[T]) Consume() (item T, err error) {
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); sw.Once() {
 		if rq.head == rq.tail {
 			if rq.closed {
 				return item, io.EOF
@@ -154,6 +156,8 @@ const (
 )
 
 type ringQueueConcurrentProduce[T any] struct {
+	_ noCopy
+
 	*RingQueueOptions
 	ring           []T
 	capacity, head uint32
@@ -171,7 +175,7 @@ func newRingQueueConcurrentProduce[T any](opt *RingQueueOptions) *ringQueueConcu
 }
 
 func (rq *ringQueueConcurrentProduce[T]) Produce(item T) error {
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			sw.Once()
@@ -189,7 +193,7 @@ func (rq *ringQueueConcurrentProduce[T]) Produce(item T) error {
 		}
 		newTailStatus, newTailVal := (tail|ringQueueStatusWriting)&ringQueueTailStatusMask, (tail+1)&rq.capacity
 		if swapped := rq.tail.CompareAndSwap(tail, newTailStatus|newTailVal); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.OnceWithLevel(SpinWaitLevelPreempting)
 			continue
 		}
 		rq.ring[tail&ringQueueTailValueMask] = item
@@ -203,7 +207,7 @@ func (rq *ringQueueConcurrentProduce[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrentProduce[T]) Consume() (item T, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); sw.Once() {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			continue
@@ -228,6 +232,8 @@ func (rq *ringQueueConcurrentProduce[T]) Consume() (item T, err error) {
 }
 
 type ringQueueConcurrentConsume[T any] struct {
+	_ noCopy
+
 	*RingQueueOptions
 	ring     []T
 	capacity uint32
@@ -251,7 +257,7 @@ func (rq *ringQueueConcurrentConsume[T]) Produce(item T) error {
 	if rq.closed {
 		return io.ErrClosedPipe
 	}
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); sw.Once() {
 		if (rq.tail+1)&rq.capacity == rq.head.Load()&rq.capacity {
 			if rq.Nonblocking {
 				break
@@ -268,7 +274,7 @@ func (rq *ringQueueConcurrentConsume[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrentConsume[T]) Consume() (item T, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); sw.Once() {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); sw.Once() {
 		head := rq.head.Load()
 		if head == rq.tail {
 			if rq.closed {
@@ -297,6 +303,8 @@ func (rq *ringQueueConcurrentConsume[T]) Close() error {
 }
 
 type ringQueueConcurrent[T any] struct {
+	_ noCopy
+
 	*RingQueueOptions
 	ring     []T
 	capacity uint32
@@ -315,7 +323,7 @@ func newRingQueueConcurrent[T any](opt *RingQueueOptions) *ringQueueConcurrent[T
 }
 
 func (rq *ringQueueConcurrent[T]) Produce(item T) error {
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
 			sw.Once()
@@ -333,7 +341,7 @@ func (rq *ringQueueConcurrent[T]) Produce(item T) error {
 		}
 		newTailStatus, newTailVal := (tail|ringQueueStatusWriting)&ringQueueTailStatusMask, (tail+1)&rq.capacity
 		if swapped := rq.tail.CompareAndSwap(tail, newTailStatus|newTailVal); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.OnceWithLevel(SpinWaitLevelPreempting)
 			continue
 		}
 		rq.ring[tail&ringQueueTailValueMask] = item
@@ -347,7 +355,7 @@ func (rq *ringQueueConcurrent[T]) Produce(item T) error {
 }
 
 func (rq *ringQueueConcurrent[T]) Consume() (item T, err error) {
-	for sw := NewParamSpinWait().SetLevel(SpinWaitLevelConsume); !sw.Closed(); {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); {
 		head, tail := rq.head.Load(), rq.tail.Load()
 		if head == tail&ringQueueTailValueMask {
 			if tail&ringQueueStatusClosed == ringQueueStatusClosed {
@@ -356,16 +364,16 @@ func (rq *ringQueueConcurrent[T]) Consume() (item T, err error) {
 			if rq.Nonblocking {
 				return item, ErrTemporarilyUnavailable
 			}
-			sw.OnceWithLevel(SpinWaitLevelConsume)
+			sw.Once()
 			continue
 		}
 		if tail&ringQueueStatusWriting == ringQueueStatusWriting {
-			sw.OnceWithLevel(SpinWaitLevelConsume)
+			sw.Once()
 			continue
 		}
 		item = rq.ring[head]
 		if swapped := rq.head.CompareAndSwap(head, (head+1)&rq.capacity); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.OnceWithLevel(SpinWaitLevelPreempting)
 			continue
 		}
 
@@ -384,7 +392,7 @@ func newRingQueueConcurrentClose() *ringQueueConcurrentClose {
 }
 
 func (rq *ringQueueConcurrentClose) Close() error {
-	for sw := NewParamSpinWait().SetLevel(spinWaitLevelProduce); !sw.Closed(); {
+	for sw := NewSpinWaitWithLevel(SpinWaitLevelPending); !sw.Closed(); {
 		tail := rq.tail.Load()
 		if tail&ringQueueStatusClosed == ringQueueStatusClosed {
 			return nil
@@ -394,7 +402,7 @@ func (rq *ringQueueConcurrentClose) Close() error {
 			continue
 		}
 		if swapped := rq.tail.CompareAndSwap(tail, tail|ringQueueStatusClosed); !swapped {
-			sw.OnceWithLevel(spinWaitLevelAtomic)
+			sw.OnceWithLevel(SpinWaitLevelPreempting)
 			continue
 		}
 
