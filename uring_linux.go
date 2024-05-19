@@ -21,6 +21,23 @@ const (
 )
 
 const (
+	IORING_FEAT_SINGLE_MMAP = 1 << iota
+	IORING_FEAT_NODROP
+	IORING_FEAT_SUBMIT_STABLE
+	IORING_FEAT_RW_CUR_POS
+	IORING_FEAT_CUR_PERSONALITY
+	IORING_FEAT_FAST_POLL
+	IORING_FEAT_POLL_32BITS
+	IORING_FEAT_SQPOLL_NONFIXED
+	IORING_FEAT_EXT_ARG
+	IORING_FEAT_NATIVE_WORKERS
+	IORING_FEAT_RSRC_TAGS
+	IORING_FEAT_CQE_SKIP
+	IORING_FEAT_LINKED_FILE
+	IORING_FEAT_REG_REG_RING
+)
+
+const (
 	IORING_ENTER_GETEVENTS       = 1 << 0
 	IORING_ENTER_SQ_WAKEUP       = 1 << 1
 	IORING_ENTER_SQ_WAIT         = 1 << 2
@@ -74,6 +91,10 @@ const (
 )
 
 const (
+	IORING_CQE_BUFFER_SHIFT = 16
+)
+
+const (
 	IORING_REGISTER_BUFFERS uintptr = iota
 	IORING_UNREGISTER_BUFFERS
 	IORING_REGISTER_FILES
@@ -114,6 +135,8 @@ const (
 )
 
 type ioUring struct {
+	_ noCopy
+
 	params *ioUringParams
 
 	sq     ioUringSq
@@ -261,6 +284,10 @@ func (ur *ioUring) registerPoller(p *epoll) (int, error) {
 	}
 
 	return efd, nil
+}
+
+func (ur *ioUring) feature(feat uint32) bool {
+	return feat == ur.params.features&feat
 }
 
 func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUringSqe)) error {
