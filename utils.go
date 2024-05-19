@@ -5,3 +5,5 @@
 package sox
 
 type noCopy struct{}
+
+type Empty = struct{}
