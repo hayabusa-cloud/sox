@@ -205,11 +205,6 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	}
 	uring.sq.sqes = unsafe.Slice((*ioUringSqe)(unsafe.Pointer(&b[0])), int(params.sqEntries))
 
-	b, err = unix.Mmap(uring.ringFd, IORING_OFF_CQ_RING, int(uring.cq.ringSz), unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC, unix.MAP_SHARED|unix.MAP_POPULATE)
-	if err != nil {
-		return uring, errFromUnixErrno(err)
-	}
-	ptr = uintptr(unsafe.Pointer(&b[0]))
 	uring.cq.kHead = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.head)))
 	uring.cq.kTail = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.tail)))
 	uring.cq.kRingMask = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.ringMask)))
