@@ -137,10 +137,10 @@ const (
 type ioUring struct {
 	_ noCopy
 
+	sl     Spinlock
 	params *ioUringParams
 
 	sq     ioUringSq
-	sqLock atomic.Bool
 	cq     ioUringCq
 	ringFd int
 	ops    []ioUringProbeOp
@@ -174,12 +174,12 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	}
 
 	uring := &ioUring{
+		sl:     Spinlock{},
 		params: params,
 
 		sq: ioUringSq{
 			ringSz: params.sqOff.array + uint32(unsafe.Sizeof(uint32(0)))*params.sqEntries,
 		},
-		sqLock: atomic.Bool{},
 		cq: ioUringCq{
 			ringSz: params.cqOff.cqes + uint32(unsafe.Sizeof(uint32(0)))*params.cqEntries,
 		},
@@ -286,14 +286,8 @@ func (ur *ioUring) feature(feat uint32) bool {
 }
 
 func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUringSqe)) error {
-	sw := SpinWait{}
-	for {
-		if ur.sqLock.CompareAndSwap(false, true) {
-			break
-		}
-		sw.Once()
-	}
-	defer ur.sqLock.Store(false)
+	ur.sl.Lock()
+	defer ur.sl.Unlock()
 
 	h, t := *ur.sq.kHead, *ur.sq.kTail
 	if (t+1)&*ur.sq.kRingMask == h {
