@@ -15,6 +15,15 @@ type Buffers = net.Buffers
 
 var PageSize = uintptr(os.Getpagesize())
 
+// AlignedMem returns a byte slice with the specified size
+// and starting address aligned to the memory page size.
+func AlignedMem(size int) []byte {
+	p := make([]byte, uintptr(size)+PageSize-1)
+	ptr := uintptr(unsafe.Pointer(unsafe.SliceData(p)))
+	ptr = ((ptr + PageSize - 1) / PageSize) * PageSize
+	return unsafe.Slice((*byte)(unsafe.Pointer(ptr)), size)
+}
+
 // AlignedMemBlocks returns n bytes slices which
 // has length with memory page size and address
 // starts from multiple of memory page size
