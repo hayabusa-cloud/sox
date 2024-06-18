@@ -11,8 +11,10 @@ import (
 	"net"
 )
 
+// Sockaddr is an alias for the unix.Sockaddr type.
 type Sockaddr = unix.Sockaddr
 
+// AddrToSockaddr takes a network address and returns the Sockaddr type socket address.
 func AddrToSockaddr(addr Addr) Sockaddr {
 	switch addr := addr.(type) {
 	case *IPAddr:

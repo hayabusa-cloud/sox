@@ -200,7 +200,7 @@ func inetAddrToSockaddr(addr Addr) unix.Sockaddr {
 	}
 }
 
-func sockaddr(sa unix.Sockaddr) (ptr unsafe.Pointer, n int, err error) {
+func sockaddr(sa Sockaddr) (ptr unsafe.Pointer, n int, err error) {
 	switch sa.(type) {
 	case *unix.SockaddrInet4:
 		return inet4Sockaddr(sa.(*unix.SockaddrInet4))

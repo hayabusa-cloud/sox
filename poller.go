@@ -33,14 +33,15 @@ type poller interface {
 	Close() error
 }
 
-type pollFd interface {
+// PollFd is the interface that warps Fd
+type PollFd interface {
 	// Fd returns the file descriptor
 	Fd() int
 }
 
 // PollReader is the interface that groups Fd and the basic Read method
 type PollReader interface {
-	pollFd
+	PollFd
 	io.Reader
 }
 
@@ -53,7 +54,7 @@ type PollUintReader interface {
 
 // PollWriter is the interface that groups Fd and the basic Write method
 type PollWriter interface {
-	pollFd
+	PollFd
 	io.Writer
 }
 
@@ -80,7 +81,7 @@ type PollUintReadWriter interface {
 
 // PollCloser is the interface that groups Fd and the basic Close method
 type PollCloser interface {
-	pollFd
+	PollFd
 	io.Closer
 }
 

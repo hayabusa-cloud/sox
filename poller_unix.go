@@ -12,7 +12,7 @@ import (
 
 // PollSignalfd is the interface that groups Fd and ReadSiginfo method
 type PollSignalfd interface {
-	pollFd
+	PollFd
 	// ReadSiginfo reads and returns the came signal info
 	ReadSiginfo() (sig unix.Signal, code int, err error)
 }

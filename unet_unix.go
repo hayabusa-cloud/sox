@@ -12,9 +12,12 @@ import (
 	"unsafe"
 )
 
+// UnixAddr represents a Unix domain socket address.
+// It is an alias for the net.UnixAddr type.
 type UnixAddr = net.UnixAddr
 
 var (
+	// ResolveUnixAddr is a function that resolves a Unix network address.
 	ResolveUnixAddr = net.ResolveUnixAddr
 )
 
