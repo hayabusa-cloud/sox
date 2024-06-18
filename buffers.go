@@ -13,6 +13,8 @@ import (
 // Buffers is alias of net.Buffers
 type Buffers = net.Buffers
 
+var PageSize = uintptr(os.Getpagesize())
+
 // AlignedMemBlocks returns n bytes slices which
 // has length with memory page size and address
 // starts from multiple of memory page size
@@ -21,12 +23,11 @@ func AlignedMemBlocks(n int) (blocks [][]byte) {
 		panic("bad block num")
 	}
 	blocks = make([][]byte, n)
-	size := os.Getpagesize()
-	p := make([]byte, size*(n+1))
+	p := make([]byte, int(PageSize)*(n+1))
 	ptr := uintptr(unsafe.Pointer(&p[0]))
-	off := ptr - (ptr & ^(uintptr(size) - 1))
+	off := ptr - (ptr & ^(PageSize - 1))
 	for i := range n {
-		blocks[i] = unsafe.Slice(&p[i*size-int(off)], size)
+		blocks[i] = unsafe.Slice(&p[uintptr(i)*PageSize-off], PageSize)
 	}
 	return
 }
@@ -186,95 +187,55 @@ func sliceOfPicoArray(s []byte, offset int64, n int) []PicoBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]PicoBuffer, n)
-	for i := range n {
-		ret[i] = picoArrayFromSlice(s, offset)
-		offset += BufferSizePico
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*PicoBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfNanoArray(s []byte, offset int64, n int) []NanoBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]NanoBuffer, n)
-	for i := range n {
-		ret[i] = nanoArrayFromSlice(s, offset)
-		offset += BufferSizeNano
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*NanoBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfMicroArray(s []byte, offset int64, n int) []MicroBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]MicroBuffer, n)
-	for i := range n {
-		ret[i] = microArrayFromSlice(s, offset)
-		offset += BufferSizeMicro
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*MicroBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfSmallArray(s []byte, offset int64, n int) []SmallBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]SmallBuffer, n)
-	for i := range n {
-		ret[i] = smallArrayFromSlice(s, offset)
-		offset += BufferSizeSmall
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*SmallBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfMediumArray(s []byte, offset int64, n int) []MediumBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]MediumBuffer, n)
-	for i := range n {
-		ret[i] = mediumArrayFromSlice(s, offset)
-		offset += BufferSizeMedium
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*MediumBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfLargeArray(s []byte, offset int64, n int) []LargeBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]LargeBuffer, n)
-	for i := range n {
-		ret[i] = largeArrayFromSlice(s, offset)
-		offset += BufferSizeLarge
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*LargeBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfHugeArray(s []byte, offset int64, n int) []HugeBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]HugeBuffer, n)
-	for i := range n {
-		ret[i] = hugeArrayFromSlice(s, offset)
-		offset += BufferSizeHuge
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*HugeBuffer)(unsafe.Add(base, offset)), n)
 }
 func sliceOfGiantArray(s []byte, offset int64, n int) []GiantBuffer {
 	if n < 1 {
 		panic("bad array num")
 	}
-	ret := make([]GiantBuffer, n)
-	for i := range n {
-		ret[i] = giantArrayFromSlice(s, offset)
-		offset += BufferSizeGiant
-	}
-
-	return ret
+	base := unsafe.Pointer(unsafe.SliceData(s))
+	return unsafe.Slice((*GiantBuffer)(unsafe.Add(base, offset)), n)
 }
