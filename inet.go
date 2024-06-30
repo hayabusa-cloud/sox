@@ -205,6 +205,28 @@ func IP6AddressToBytes(ip net.IP) [16]byte {
 	}
 }
 
+func ipFamily(ip IP) NetworkType {
+	if ip == nil || ip.IsUnspecified() {
+		return NetworkIPv6
+	}
+	if len(ip) <= net.IPv4len {
+		return NetworkIPv4
+	}
+	if ip.To4() != nil {
+		return NetworkIPv4
+	}
+	return NetworkIPv6
+}
+
+func networkIPFamily(network string, ip IP) NetworkType {
+	if strings.HasSuffix(network, "4") {
+		return NetworkIPv4
+	} else if strings.HasSuffix(network, "6") {
+		return NetworkIPv6
+	}
+	return ipFamily(ip)
+}
+
 func ip6ZoneID(zone string) int {
 	if zone == "" {
 		return 0

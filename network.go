@@ -5,6 +5,7 @@
 package sox
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -42,6 +43,9 @@ var (
 
 	// ErrNoPermission represents an error indicating that the operation is not permitted.
 	ErrNoPermission = errors.New("operation not permitted")
+
+	// ErrCanceled represents an error indicating that an operation was canceled.
+	ErrCanceled = errors.New("operation canceled")
 )
 
 // NetworkType is a custom type used to represent network types in the code.
@@ -61,8 +65,8 @@ type Socket interface {
 	// Fd returns the file descriptor associated with the socket.
 	Fd() int
 
-	// Protocol returns the UnderlyingProtocol features of the Socket.
-	Protocol() UnderlyingProtocol
+	// NetworkType returns the network type associated with the socket.
+	NetworkType() NetworkType
 
 	// Reader is an interface that represents an object that can read data.
 	io.Reader
@@ -113,6 +117,11 @@ var (
 	// DefaultResolver is a variable that holds the default resolver implementation
 	// for performing network resolution in the Go standard library.
 	DefaultResolver = net.DefaultResolver
+)
+
+var (
+	// NetworkByteOrder represents the network byte order, which is big-endian.
+	NetworkByteOrder = binary.BigEndian
 )
 
 // GetFd gets the file descriptor of a given object. It checks if the object implements the PollFd interface,

@@ -17,7 +17,7 @@ import (
 func TestUnixSockaddr(t *testing.T) {
 	t.Run("abstract", func(t *testing.T) {
 		unixAddr, _ := ResolveUnixAddr("unixpacket", "@")
-		sa := unixAddrToSockaddr(unixAddr).(*unix.SockaddrUnix)
+		sa := unixAddrToSockaddr(unixAddr)
 		if unixAddr.Name != sa.Name {
 			t.Errorf("unix sockaddr expected name=%s but got %s", unixAddr.Name, sa.Name)
 			return
@@ -46,7 +46,7 @@ func TestUnixSockaddr(t *testing.T) {
 	t.Run("pathname", func(t *testing.T) {
 		name := "uds_test"
 		unixAddr, _ := ResolveUnixAddr("unixpacket", name)
-		sa := unixAddrToSockaddr(unixAddr).(*unix.SockaddrUnix)
+		sa := unixAddrToSockaddr(unixAddr)
 		if unixAddr.Name != sa.Name {
 			t.Errorf("unix sockaddr expected name=%s but got %s", unixAddr.Name, sa.Name)
 			return

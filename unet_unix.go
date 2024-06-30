@@ -9,6 +9,7 @@ package sox
 import (
 	"golang.org/x/sys/unix"
 	"net"
+	"slices"
 	"unsafe"
 )
 
@@ -21,13 +22,13 @@ var (
 	ResolveUnixAddr = net.ResolveUnixAddr
 )
 
-func unixAddrToSockaddr(addr *net.UnixAddr) unix.Sockaddr {
-	return &unix.SockaddrUnix{
+func unixAddrToSockaddr(addr *UnixAddr) *SockaddrUnix {
+	return &SockaddrUnix{
 		Name: addr.Name,
 	}
 }
 
-func unixSockaddr(sa *unix.SockaddrUnix) (ptr unsafe.Pointer, n int, err error) {
+func unixSockaddr(sa *SockaddrUnix) (ptr unsafe.Pointer, n int, err error) {
 	rawSa := &unix.RawSockaddrUnix{
 		Family: unix.AF_UNIX,
 	}
@@ -42,4 +43,23 @@ func unixSockaddr(sa *unix.SockaddrUnix) (ptr unsafe.Pointer, n int, err error) 
 	ptr = unsafe.Pointer(rawSa)
 
 	return ptr, n, nil
+}
+
+func unixSockaddrData(sa *SockaddrUnix) (data []byte, err error) {
+	ptr, n, _ := unixSockaddr(sa)
+	return unsafe.Slice((*byte)(ptr), n), nil
+}
+
+func unixSockaddrFromData(data []byte) *SockaddrUnix {
+	raw := (*unix.RawSockaddrUnix)(unsafe.Pointer(unsafe.SliceData(data)))
+	sa := SockaddrUnix{}
+	if raw.Path[0] == 0 {
+		sa.Name = "@"
+	} else {
+		l := slices.Index(raw.Path[:], 0)
+		sa.Name = unsafe.String((*byte)(unsafe.Pointer(&raw.Path[0])), l)
+	}
+	fRawPtr := unsafe.Add(unsafe.Pointer(&sa), unsafe.Sizeof(sa.Name))
+	*(*unix.RawSockaddrUnix)(fRawPtr) = *raw
+	return &sa
 }
