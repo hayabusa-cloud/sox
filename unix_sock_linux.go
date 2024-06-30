@@ -16,9 +16,9 @@ type UnixSocket struct {
 	*socket
 }
 
-func newUnixSocket(sa unix.Sockaddr) (*UnixSocket, error) {
+func newUnixSocket(sa Sockaddr) (*UnixSocket, error) {
 	fd, err := 0, error(nil)
-	if _, ok := sa.(*unix.SockaddrUnix); ok {
+	if _, ok := sa.(*SockaddrUnix); ok {
 		fd, err = unix.Socket(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC, 0)
 		if err != nil {
 			return nil, err
@@ -41,8 +41,8 @@ func newUnixSocketPair() (so [2]*UnixSocket, err error) {
 		return [2]*UnixSocket{}, errFromUnixErrno(err)
 	}
 
-	so[0] = &UnixSocket{socket: newSocket(NetworkUnix, fd[0], &unix.SockaddrUnix{})}
-	so[1] = &UnixSocket{socket: newSocket(NetworkUnix, fd[1], &unix.SockaddrUnix{})}
+	so[0] = &UnixSocket{socket: newSocket(NetworkUnix, fd[0], &SockaddrUnix{})}
+	so[1] = &UnixSocket{socket: newSocket(NetworkUnix, fd[1], &SockaddrUnix{})}
 	return so, nil
 }
 
@@ -113,7 +113,7 @@ func (l *UnixListener) Accept() (Conn, error) {
 }
 
 func (l *UnixListener) Close() error {
-	sa := l.sa.(*unix.SockaddrUnix)
+	sa := l.sa.(*SockaddrUnix)
 	if len(sa.Name) > 0 {
 		_ = unix.Unlink(sa.Name)
 	}

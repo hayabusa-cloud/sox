@@ -36,16 +36,18 @@ const (
 type socket struct {
 	network NetworkType
 	fd      int
-	sa      unix.Sockaddr
+	sa      Sockaddr
 }
 
-func newSocket(network NetworkType, fd int, sa unix.Sockaddr) *socket {
+func newSocket(network NetworkType, fd int, sa Sockaddr) *socket {
 	return &socket{fd: fd, sa: sa, network: network}
 }
 
 func (so *socket) Fd() int {
 	return so.fd
 }
+
+func (so *socket) NetworkType() NetworkType { return so.network }
 
 func (so *socket) Readv(iovs [][]byte) (n int, err error) {
 	n, err = unix.Readv(so.fd, iovs)
@@ -63,7 +65,7 @@ func (so *socket) Writev(iovs [][]byte) (n int, err error) {
 	return n, nil
 }
 
-func (so *socket) Recvmsg(buffers [][]byte, oob []byte) (n, oobn int, recvflags int, from unix.Sockaddr, err error) {
+func (so *socket) Recvmsg(buffers [][]byte, oob []byte) (n, oobn int, recvflags int, from Sockaddr, err error) {
 	n, oobn, recvflags, from, err = unix.RecvmsgBuffers(so.fd, buffers, oob, unix.MSG_WAITALL)
 	if err != nil {
 		return 0, 0, recvflags, nil, errFromUnixErrno(err)
@@ -112,7 +114,7 @@ func (so *socket) Close() error {
 	return unix.Close(so.fd)
 }
 
-func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
+func acceptWait(fd int) (nfd int, sa Sockaddr, err error) {
 	for sw := NewParamSpinWait(); !sw.Closed(); sw.Once() {
 		nfd, sa, err = unix.Accept4(fd, unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC)
 		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
@@ -126,7 +128,7 @@ func acceptWait(fd int) (nfd int, sa unix.Sockaddr, err error) {
 	return
 }
 
-func connectWait(fd int, sa unix.Sockaddr) error {
+func connectWait(fd int, sa Sockaddr) error {
 	if err := unix.Connect(fd, sa); err == nil {
 		return nil
 	} else if err != unix.EINPROGRESS {
