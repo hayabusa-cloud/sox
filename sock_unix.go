@@ -35,12 +35,13 @@ const (
 
 type socket struct {
 	network NetworkType
+	typ     UnderlyingProtocol
 	fd      int
 	sa      Sockaddr
 }
 
 func newSocket(network NetworkType, fd int, sa Sockaddr) *socket {
-	return &socket{fd: fd, sa: sa, network: network}
+	return &socket{fd: fd, sa: sa, network: network, typ: 0}
 }
 
 func (so *socket) Fd() int {
@@ -48,6 +49,36 @@ func (so *socket) Fd() int {
 }
 
 func (so *socket) NetworkType() NetworkType { return so.network }
+
+func (so *socket) Protocol() UnderlyingProtocol {
+	if so.typ > 0 {
+		return so.typ
+	}
+	v, err := unix.GetsockoptInt(so.fd, unix.SOL_SOCKET, unix.SO_TYPE)
+	if err != nil {
+		return 0
+	}
+	so.typ = UnderlyingProtocol(v & 0xff)
+	return so.typ
+}
+
+func (so *socket) Connect(addr Addr) error {
+	sa := AddrToSockaddr(addr)
+	return connectWait(so.fd, sa)
+}
+
+func (so *socket) Accept() (Socket, error) {
+	nfd, sa, err := acceptWait(so.fd)
+	if err != nil {
+		return nil, err
+	}
+	newSo := newSocket(so.network, nfd, so.sa)
+	conn := connSocket{
+		socket:         newSo,
+		remoteSockAddr: sa,
+	}
+	return &conn, nil
+}
 
 func (so *socket) Readv(iovs [][]byte) (n int, err error) {
 	n, err = unix.Readv(so.fd, iovs)
@@ -100,8 +131,6 @@ func (so *socket) Read(b []byte) (n int, err error) {
 	return n, nil
 }
 
-// todo: poll the completed notification from uring to know
-// it is safe to reuse a previously passed buffer or not
 func (so *socket) Write(b []byte) (n int, err error) {
 	err = unix.Send(so.fd, b, unix.MSG_ZEROCOPY)
 	if err != nil {
@@ -112,6 +141,11 @@ func (so *socket) Write(b []byte) (n int, err error) {
 
 func (so *socket) Close() error {
 	return unix.Close(so.fd)
+}
+
+type connSocket struct {
+	*socket
+	remoteSockAddr Sockaddr
 }
 
 func acceptWait(fd int) (nfd int, sa Sockaddr, err error) {

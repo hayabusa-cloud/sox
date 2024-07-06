@@ -53,11 +53,11 @@ type NetworkType int
 
 const (
 	// NetworkUnix represents a constant value used to indicate the Unix network type.
-	NetworkUnix = 1
+	NetworkUnix NetworkType = 1
 	// NetworkIPv4 represents a constant value used to indicate the IPv4 network type.
-	NetworkIPv4 = 2
+	NetworkIPv4 NetworkType = 2
 	// NetworkIPv6 represents a constant value used to indicate the IPv6 network type.
-	NetworkIPv6 = 10
+	NetworkIPv6 NetworkType = 10
 )
 
 // Socket is a generic network socket
@@ -68,6 +68,10 @@ type Socket interface {
 	// NetworkType returns the network type associated with the socket.
 	NetworkType() NetworkType
 
+	// Protocol returns the underlying protocol of the Socket.
+	// It indicates the transmission protocol features.
+	Protocol() UnderlyingProtocol
+
 	// Reader is an interface that represents an object that can read data.
 	io.Reader
 
@@ -76,6 +80,14 @@ type Socket interface {
 
 	// Closer is an interface implemented by objects that can be closed.
 	io.Closer
+}
+
+// ListenerSocket is an interface that represents a network socket capable of accepting incoming connections.
+// It extends the Socket interface and adds the Accept method which returns a new socket for the accepted connection.
+type ListenerSocket interface {
+	Socket
+	// Accept accepts incoming connections and returns a new socket for the accepted connection.
+	Accept() (Socket, error)
 }
 
 // Listener represents a generic network listener.
