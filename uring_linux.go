@@ -15,9 +15,36 @@ import (
 )
 
 const (
-	IORING_SETUP_IOPOLL = 1 << 0
-	IORING_SETUP_SQPOLL = 1 << 1
-	IORING_SETUP_SQ_AFF = 1 << 2
+	_ = 1 << (iota + 7)
+	_
+	UringEntriesPico
+	UringEntriesNano
+	UringEntriesMicro
+	UringEntriesSmall
+	UringEntriesMedium
+	UringEntriesLarge
+	UringEntriesHuge
+)
+
+const (
+	IORING_SETUP_IOPOLL             = 1 << 0
+	IORING_SETUP_SQPOLL             = 1 << 1
+	IORING_SETUP_SQ_AFF             = 1 << 2
+	IORING_SETUP_CQSIZE             = 1 << 3
+	IORING_SETUP_CLAMP              = 1 << 4
+	IORING_SETUP_ATTACH_WQ          = 1 << 5
+	IORING_SETUP_R_DISABLED         = 1 << 6
+	IORING_SETUP_SUBMIT_ALL         = 1 << 7
+	IORING_SETUP_COOP_TASKRUN       = 1 << 8
+	IORING_SETUP_TASKRUN_FLAG       = 1 << 9
+	IORING_SETUP_SQE128             = 1 << 10
+	IORING_SETUP_CQE32              = 1 << 11
+	IORING_SETUP_SINGLE_ISSUER      = 1 << 12
+	IORING_SETUP_DEFER_TASKRUN      = 1 << 13
+	IORING_SETUP_NO_MMAP            = 1 << 14
+	IORING_SETUP_REGISTERED_FD_ONLY = 1 << 15
+	IORING_SETUP_NO_SQARRAY         = 1 << 16
+	IORING_SETUP_HYBRID_IOPOLL      = 1 << 17
 )
 
 const (
@@ -46,9 +73,12 @@ const (
 )
 
 const (
-	IORING_OFF_SQ_RING int64 = 0
-	IORING_OFF_CQ_RING int64 = 0x8000000
-	IORING_OFF_SQES    int64 = 0x10000000
+	IORING_OFF_SQ_RING    int64 = 0
+	IORING_OFF_CQ_RING    int64 = 0x8000000
+	IORING_OFF_SQES       int64 = 0x10000000
+	IORING_OFF_PBUF_RING        = 0x80000000
+	IORING_OFF_PBUF_SHIFT       = 16
+	IORING_OFF_MMAP_MASK        = 0xf8000000
 )
 
 const (
@@ -121,6 +151,9 @@ const (
 	IORING_UNREGISTER_PBUF_RING
 	IORING_REGISTER_SYNC_CANCEL
 	IORING_REGISTER_FILE_ALLOC_RANGE
+	IORING_REGISTER_PBUF_STATUS
+	IORING_REGISTER_NAPI
+	IORING_UNREGISTER_NAPI
 )
 
 const (
@@ -144,13 +177,21 @@ type ioUring struct {
 	cq     ioUringCq
 	ringFd int
 	ops    []ioUringProbeOp
-	bufs   Buffers
+	ctxs   []ioUringCtx
+	bufs   [][]byte
 }
 
+type (
+	ioUringFd       int32
+	ioUringUserdata []byte
+)
+
 type ioUringCtx struct {
-	context.Context
-	op    uint8
-	flags uint8
+	op       uint8
+	flags    uint8
+	buf      bufferGroupIndex // buf_index or buf_group
+	fd       ioUringFd
+	userdata ioUringUserdata
 }
 
 func (ctx *ioUringCtx) getOp() (uint8, uint8) {
@@ -184,7 +225,7 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 			ringSz: params.cqOff.cqes + uint32(unsafe.Sizeof(uint32(0)))*params.cqEntries,
 		},
 		ringFd: fd,
-		bufs:   Buffers{},
+		bufs:   [][]byte{},
 	}
 
 	b, err := unix.Mmap(uring.ringFd, IORING_OFF_SQ_RING, int(uring.sq.ringSz), unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC, unix.MAP_SHARED|unix.MAP_POPULATE)
@@ -212,7 +253,24 @@ func newIoUring(entries int, opts ...func(params *ioUringParams)) (*ioUring, err
 	uring.cq.kOverflow = (*uint32)(unsafe.Pointer(ptr + uintptr(params.cqOff.overflow)))
 	uring.cq.cqes = unsafe.Slice((*ioUringCqe)(unsafe.Pointer(ptr+uintptr(params.cqOff.cqes))), int(params.cqEntries))
 
+	uring.ctxs = make([]ioUringCtx, *uring.cq.kRingEntries)
+
 	return uring, nil
+}
+
+type ioUringProbe struct {
+	lastOp uint8
+	opsLen uint8
+	resv   uint16
+	resv2  [3]uint32
+	ops    [256]ioUringProbeOp
+}
+
+type ioUringProbeOp struct {
+	op    uint8
+	resv  uint8
+	flags uint16
+	resv2 uint32
 }
 
 func (ur *ioUring) registerProbe(probe *ioUringProbe) error {
@@ -232,16 +290,24 @@ func (ur *ioUring) registerProbe(probe *ioUringProbe) error {
 	return nil
 }
 
-func (ur *ioUring) registerBuffers(n, size int) error {
+func (ur *ioUring) registerBuffers(addr unsafe.Pointer, n, size int) error {
 	if ur.bufs != nil && len(ur.bufs) > 0 {
 		panic("io-uring buffers already registered")
 	}
 	if n < 1 || size < 1 || 0 != n&(n-1) || 0 != size&(size-1) {
 		return ErrInvalidParam
 	}
-	ur.bufs = NewBuffers(n, size)
-	addr, n := ioVecFromBytesSlice(ur.bufs)
-	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_BUFFERS, addr, uintptr(n), 0, 0)
+	vectors := make([]ioVec, 0, n)
+	ur.bufs = make([][]byte, 0, n)
+	for i := range n {
+		base := unsafe.Add(addr, i*size)
+		vectors = append(vectors, ioVec{Base: (*byte)(base), Len: uint64(size)})
+		ur.bufs = append(ur.bufs, unsafe.Slice((*byte)(base), size))
+	}
+	data := uintptr(unsafe.Pointer(unsafe.SliceData(vectors)))
+	reg := ioUringRSrcRegister{nr: uint32(n), data: uint64(data)}
+	regPtr, regSize := uintptr(unsafe.Pointer(&reg)), unsafe.Sizeof(reg)
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_BUFFERS2, regPtr, regSize, 0, 0)
 	if errno != 0 {
 		return errFromUnixErrno(errno)
 	}
@@ -257,8 +323,44 @@ func (ur *ioUring) unregisterBuffers() error {
 	if errno != 0 {
 		return errFromUnixErrno(errno)
 	}
-	ur.bufs = Buffers{}
+	ur.bufs = [][]byte{}
 
+	return nil
+}
+
+func (ur *ioUring) registerBufRing(entries int, groupID uint16) (*ioUringBufRing, error) {
+	if entries < 1 || entries > (1<<15) {
+		panic("entries must be between 1 and 32768")
+	}
+	entries--
+	entries |= entries >> 1
+	entries |= entries >> 2
+	entries |= entries >> 4
+	entries |= entries >> 8
+	entries++
+	s := AlignedMem(entries * int(unsafe.Sizeof(ioUringBuf{})))
+	ringAddr := uintptr(unsafe.Pointer(unsafe.SliceData(s)))
+	r := (*ioUringBufRing)(unsafe.Pointer(ringAddr))
+	reg := ioUringBufReg{
+		ringAddr:    uint64(ringAddr),
+		ringEntries: uint32(entries),
+		bgid:        groupID,
+	}
+	addr := uintptr(unsafe.Pointer(&reg))
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_PBUF_RING, addr, 1, 0, 0)
+	if errno != 0 {
+		return r, errFromUnixErrno(errno)
+	}
+	return r, nil
+}
+
+func (ur *ioUring) unregisterBufRing(groupID uint16) error {
+	reg := ioUringBufReg{bgid: groupID}
+	addr := uintptr(unsafe.Pointer(&reg))
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_UNREGISTER_PBUF_RING, addr, 1, 0, 0)
+	if errno != 0 {
+		return errFromUnixErrno(errno)
+	}
 	return nil
 }
 
@@ -285,7 +387,15 @@ func (ur *ioUring) feature(feat uint32) bool {
 	return feat == ur.params.features&feat
 }
 
-func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUringSqe)) error {
+func (ur *ioUring) enable() error {
+	_, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_ENABLE_RINGS, 0, 0, 0, 0)
+	if errno != 0 {
+		return errFromUnixErrno(errno)
+	}
+	return nil
+}
+
+func (ur *ioUring) directSubmission(ctx context.Context, fn func(e *ioUringSqe)) error {
 	ur.sl.Lock()
 	defer ur.sl.Unlock()
 
@@ -295,11 +405,37 @@ func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUri
 	}
 
 	e := &ur.sq.sqes[t&*ur.sq.kRingMask]
-	e.opcode = op
-	e.flags = flags
 	fn(e)
-	userData := ioUringCtx{Context: ctx, op: op, flags: flags}
-	e.userData = uint64(uintptr(unsafe.Pointer(&userData)))
+	c := &ur.ctxs[t&*ur.cq.kRingMask]
+	c.op = e.opcode
+	c.flags = e.flags
+	c.buf = ContextUserdata[bufferGroupIndex](ctx)
+	c.fd = ContextUserdata[ioUringFd](ctx)
+	c.userdata = ContextUserdata[ioUringUserdata](ctx)
+	e.userData = uint64(uintptr(unsafe.Pointer(c)))
+	*ur.sq.kTail++
+
+	return nil
+}
+
+func (ur *ioUring) indirectSubmission(ctx context.Context, fn func(e *ioUringSqe)) error {
+	ur.sl.Lock()
+	defer ur.sl.Unlock()
+
+	h, t := *ur.sq.kHead, *ur.sq.kTail
+	if (t+1)&*ur.sq.kRingMask == h {
+		return ErrTemporarilyUnavailable
+	}
+
+	e := &ur.sq.sqes[t&*ur.sq.kRingMask]
+	fn(e)
+	c := &ur.ctxs[t&*ur.cq.kRingMask]
+	c.op = e.opcode
+	c.flags = e.flags
+	c.buf = ContextUserdata[bufferGroupIndex](ctx)
+	c.fd = ContextUserdata[ioUringFd](ctx)
+	c.userdata = ContextUserdata[ioUringUserdata](ctx)
+	e.userData = uint64(uintptr(unsafe.Pointer(c)))
 
 	ur.sq.array[t&*ur.sq.kRingMask] = t & *ur.sq.kRingMask
 	*ur.sq.kTail++
@@ -307,26 +443,43 @@ func (ur *ioUring) submit(ctx context.Context, op, flags uint8, fn func(e *ioUri
 	return nil
 }
 
-func (ur *ioUring) submit3(ctx context.Context, op uint8, flags uint8, fd int, addr uint64, n int) error {
-	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+func (ur *ioUring) submit3(ctx context.Context, op uint8, flags uint8, ioprio uint16, fd int, addr uint64, n int) error {
+	setSqe := func(e *ioUringSqe) {
+		e.opcode = op
+		e.flags = flags
+		e.ioprio = ioprio
 		e.fd = int32(fd)
 		e.addr = addr
 		e.len = uint32(n)
-	})
+	}
+	if ur.params.flags&IORING_SETUP_NO_SQARRAY == IORING_SETUP_NO_SQARRAY {
+		return ur.directSubmission(ctx, setSqe)
+	}
+	return ur.indirectSubmission(ctx, setSqe)
 }
 
-func (ur *ioUring) submit6(ctx context.Context, op uint8, flags uint8, fd int, off uint64, addr uint64, n int, uflags uint32) error {
-	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+func (ur *ioUring) submit6(ctx context.Context, op uint8, flags uint8, ioprio uint16, fd int, off uint64, addr uint64, n int, uflags uint32) error {
+	setSqe := func(e *ioUringSqe) {
+		e.opcode = op
+		e.flags = flags
+		e.ioprio = ioprio
 		e.fd = int32(fd)
 		e.off = off
 		e.addr = addr
 		e.len = uint32(n)
 		e.uflags = uflags
-	})
+	}
+	if ur.params.flags&IORING_SETUP_NO_SQARRAY == IORING_SETUP_NO_SQARRAY {
+		return ur.directSubmission(ctx, setSqe)
+	}
+	return ur.indirectSubmission(ctx, setSqe)
 }
 
-func (ur *ioUring) submit9(ctx context.Context, op uint8, flags uint8, fd int, off uint64, spliceOffIn uint64, n int, uflags uint32, bufGroup uint16, personality uint16, spliceFdIn int) error {
-	return ur.submit(ctx, op, flags, func(e *ioUringSqe) {
+func (ur *ioUring) submit9(ctx context.Context, op uint8, flags uint8, ioprio uint16, fd int, off uint64, spliceOffIn uint64, n int, uflags uint32, bufGroup uint16, personality uint16, spliceFdIn int) error {
+	setSqe := func(e *ioUringSqe) {
+		e.opcode = op
+		e.flags = flags
+		e.ioprio = ioprio
 		e.fd = int32(fd)
 		e.off = off
 		e.addr = spliceOffIn
@@ -336,18 +489,29 @@ func (ur *ioUring) submit9(ctx context.Context, op uint8, flags uint8, fd int, o
 		e.bufIndex = bufGroup
 		e.personality = personality
 		e.spliceFdIn = int32(spliceFdIn)
-	})
+	}
+	if ur.params.flags&IORING_SETUP_NO_SQARRAY == IORING_SETUP_NO_SQARRAY {
+		return ur.directSubmission(ctx, setSqe)
+	}
+	return ur.indirectSubmission(ctx, setSqe)
+}
+
+func (ur *ioUring) sqCount() int {
+	return int((*ur.sq.kTail - *ur.sq.kHead) & *ur.sq.kRingMask)
 }
 
 func (ur *ioUring) enter() error {
-	if atomic.LoadUint32(ur.sq.kFlags)&IORING_SQ_NEED_WAKEUP != 0 {
+	if atomic.LoadUint32(ur.sq.kFlags)&IORING_SQ_NEED_WAKEUP == IORING_SQ_NEED_WAKEUP {
 		_, err := ioUringEnter(ur.ringFd, uintptr(ur.params.sqEntries), 0, IORING_ENTER_SQ_WAKEUP)
 		if err != nil {
 			return err
 		}
 	}
+	ur.sl.Lock()
+	defer ur.sl.Unlock()
 	if (ur.params.flags&IORING_SETUP_SQPOLL == 0) && *ur.sq.kHead != *ur.sq.kTail {
-		_, err := ioUringEnter(ur.ringFd, uintptr(ur.params.sqEntries), 0, 0)
+		n := (*ur.sq.kTail - *ur.sq.kHead) & *ur.sq.kRingMask
+		_, err := ioUringEnter(ur.ringFd, uintptr(n), 0, IORING_ENTER_GETEVENTS)
 		if err != nil {
 			return err
 		}
@@ -360,7 +524,8 @@ func (ur *ioUring) poll(n int) error {
 	if ur.params.flags&IORING_SETUP_IOPOLL == 0 {
 		return nil
 	}
-	_, err := ioUringEnter(ur.ringFd, 0, uintptr(n), IORING_ENTER_GETEVENTS)
+	submit := (*ur.sq.kTail - *ur.sq.kHead) & *ur.sq.kRingMask
+	_, err := ioUringEnter(ur.ringFd, uintptr(submit), uintptr(n), IORING_ENTER_GETEVENTS)
 
 	return err
 }
@@ -384,20 +549,86 @@ func (ur *ioUring) wait() (*ioUringCqe, error) {
 	return nil, ErrTemporarilyUnavailable
 }
 
-type ioUringProbe struct {
-	lastOp uint8
-	opsLen uint8
-	resv   uint16
-	resv2  [3]uint32
-	ops    [256]ioUringProbeOp
+func (ur *ioUring) cqAdvance(nr uint32) {
+	if nr == 0 {
+		return
+	}
+	ur.cq.advance(nr)
 }
 
-type ioUringProbeOp struct {
-	op    uint8
-	resv  uint8
-	flags uint16
-	resv2 uint32
+func (ur *ioUring) bufRingInit(br *ioUringBufRing) {
+	br.tail = 0
 }
+
+func (ur *ioUring) bufRingAdd(br *ioUringBufRing, addr uintptr, n int, bid uint16, mask, offset uintptr) {
+	add := ioUringBufSize * ((uintptr(br.tail) + offset) & mask)
+	buf := (*ioUringBuf)(unsafe.Add(unsafe.Pointer(br), add))
+	buf.addr = uint64(addr)
+	buf.len = uint32(n)
+	buf.bid = bid
+}
+
+func (ur *ioUring) bufRingAdvance(br *ioUringBufRing, count int) {
+	br.tail += uint16(count)
+}
+
+func (ur *ioUring) bufRingAvailable(br *ioUringBufRing, bgid uint16) int {
+	head, ret := uint16(0), 0
+	ret = ur.bufRingHead(bgid, &head)
+	if ret > 0 {
+		return ret
+	}
+	return int(br.tail - head)
+}
+
+func (ur *ioUring) bufRingHead(groupID uint16, head *uint16) int {
+	status := ioUringBufStatus{bufGroup: uint32(groupID)}
+
+	ret, _, errno := unix.Syscall6(unix.SYS_IO_URING_REGISTER, uintptr(ur.ringFd), IORING_REGISTER_PBUF_STATUS, uintptr(unsafe.Pointer(&status)), 1, 0, 0)
+	if ret != 0 {
+		return int(errno)
+	}
+	*head = uint16(status.head)
+	return 0
+}
+
+func (ur *ioUring) bufRingCQAdvance(br *ioUringBufRing, count int) {
+	ur.bufRingAdvance(br, count)
+	ur.cqAdvance(uint32(count))
+}
+
+type ioUringRSrcRegister struct {
+	nr    uint32
+	resv  uint32
+	resv2 uint64
+	data  uint64
+	tags  uint64
+}
+
+type ioUringBufReg struct {
+	ringAddr    uint64
+	ringEntries uint32
+	bgid        uint16
+	pad         uint16
+	_           [3]uint64
+}
+
+type ioUringBufStatus struct {
+	bufGroup uint32
+	head     uint32
+	_        [8]uint32
+}
+
+type ioUringBuf struct {
+	addr uint64
+	len  uint32
+	bid  uint16
+	tail uint16
+}
+
+var ioUringBufSize = unsafe.Sizeof(ioUringBuf{})
+
+type ioUringBufRing ioUringBuf
 
 type ioUringSq struct {
 	kHead        *uint32
@@ -439,15 +670,19 @@ type ioUringCq struct {
 	ringSz uint32
 }
 
+func (cq *ioUringCq) advance(nr uint32) {
+	atomic.AddUint32(cq.kTail, nr)
+}
+
 type ioUringCqe struct {
 	userData uint64
 	res      int32
 	flags    uint32
 }
 
-func (cqe *ioUringCqe) Context() context.Context {
+func (cqe *ioUringCqe) context() *ioUringCtx {
 	if cqe.userData == 0 {
-		return context.Background()
+		return nil
 	}
 	return (*ioUringCtx)(unsafe.Pointer(uintptr(cqe.userData)))
 }
@@ -488,10 +723,26 @@ type ioUringParams struct {
 }
 
 var (
-	ioUringDefaultParams = &ioUringParams{}
+	ioUringDefaultParams   = &ioUringParams{}
+	ioUringDisabledOptions = func(params *ioUringParams) {
+		params.flags |= IORING_SETUP_R_DISABLED
+	}
+	ioUringNoSQArrayOptions = func(params *ioUringParams) {
+		params.flags |= IORING_SETUP_NO_SQARRAY
+	}
 	ioUringIoPollOptions = func(params *ioUringParams) {
 		params.flags |= IORING_SETUP_IOPOLL
+		params.flags &= ^uint32(IORING_SETUP_COOP_TASKRUN)
+		params.flags &= ^uint32(IORING_SETUP_TASKRUN_FLAG)
+		params.flags &= ^uint32(IORING_SETUP_DEFER_TASKRUN)
 	}
+	ioUringHybridIoPollOptions = func(params *ioUringParams) {
+		params.flags |= IORING_SETUP_IOPOLL | IORING_SETUP_HYBRID_IOPOLL
+		params.flags &= ^uint32(IORING_SETUP_COOP_TASKRUN)
+		params.flags &= ^uint32(IORING_SETUP_TASKRUN_FLAG)
+		params.flags &= ^uint32(IORING_SETUP_DEFER_TASKRUN)
+	}
+	// sq poll mode is not recommended
 	ioUringSqPollOptions = func(params *ioUringParams) {
 		params.flags |= IORING_SETUP_SQPOLL | IORING_SETUP_SQ_AFF
 		params.sqThreadCPU = ioUringDefaultSqThreadCPU
@@ -510,8 +761,7 @@ func ioUringSetup(entries uint32, params *ioUringParams) (fd int, err error) {
 		err = errFromUnixErrno(errno)
 		return
 	}
-	fd, err = int(r1), nil
-	return
+	return int(r1), nil
 }
 
 func ioUringEnter(fd int, toSubmit uintptr, minComplete uintptr, flags uintptr) (n int, err error) {

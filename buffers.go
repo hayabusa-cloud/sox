@@ -118,6 +118,13 @@ func NewHugeBuffer() HugeBuffer { return HugeBuffer{} }
 // NewGiantBuffer returns a new instance of GiantBuffer.
 func NewGiantBuffer() GiantBuffer { return GiantBuffer{} }
 
+// BufferType is an interface that represents different types of buffers, including
+// PicoBuffer, NanoBuffer, MicroBuffer, SmallBuffer, MediumBuffer, LargeBuffer,
+// HugeBuffer, and GiantBuffer. Each buffer type is a byte array with a specific size.
+type BufferType interface {
+	PicoBuffer | NanoBuffer | MicroBuffer | SmallBuffer | MediumBuffer | LargeBuffer | HugeBuffer | GiantBuffer
+}
+
 // PicoBuffer represents a byte array with size of BufferSizePico
 type PicoBuffer [BufferSizePico]byte
 

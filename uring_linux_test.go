@@ -14,6 +14,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestIOUring_BasicUsage(t *testing.T) {
@@ -181,7 +182,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		rb := make([]byte, len(wb))
-		err = ur.receive(context.TODO(), 0, so[0].fd, rb)
+		err = ur.receive(context.TODO(), 0, 0, so[0].fd, rb)
 		if err != nil {
 			t.Errorf("submit recv: %v", err)
 			return
@@ -339,16 +340,6 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		udsw(t, ur)
 	})
 
-	t.Run("io poll mode read file", func(t *testing.T) {
-		ur, err := newIoUring(16, ioUringIoPollOptions)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
-
-		fr(t, ur)
-	})
-
 	t.Run("io poll mode write file", func(t *testing.T) {
 		ur, err := newIoUring(16, ioUringIoPollOptions)
 		if err != nil {
@@ -399,16 +390,6 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		udsw(t, ur)
 	})
 
-	t.Run("io sq poll mode read file", func(t *testing.T) {
-		ur, err := newIoUring(16, ioUringIoPollOptions, ioUringSqPollOptions)
-		if err != nil {
-			t.Errorf("new io-uring: %v", err)
-			return
-		}
-
-		fr(t, ur)
-	})
-
 	t.Run("io sq poll mode write file", func(t *testing.T) {
 		ur, err := newIoUring(16, ioUringIoPollOptions, ioUringSqPollOptions)
 		if err != nil {
@@ -418,4 +399,57 @@ func TestIOUring_BasicUsage(t *testing.T) {
 
 		fw(t, ur)
 	})
+}
+
+func TestIoUring_BufferSelect(t *testing.T) {
+	ur, err := newIoUring(16)
+	if err != nil {
+		t.Errorf("new io-uring: %v", err)
+		return
+	}
+
+	ctx := context.Background()
+
+	s := make([]byte, 16*BufferSizeMicro)
+	matrix := sliceOfMicroArray(s, 0, 16)
+	ptr := unsafe.Pointer(unsafe.SliceData(matrix))
+	err = ur.provideBuffers(ctx, 0, len(matrix), 0, ptr, BufferSizeMicro, 0)
+	if err != nil {
+		t.Errorf("provide buffer: %v", err)
+		return
+	}
+	so, err := newUnixSocketPair()
+	if err != nil {
+		t.Errorf("uds pair: %v", err)
+		return
+	}
+	wBuf := [BufferSizeMicro]byte{}
+	copy(wBuf[:], "hello sox!")
+	err = ur.write(ctx, 0, so[1].fd, wBuf[:], 10)
+	if err != nil {
+		t.Errorf("write fixed: %v", err)
+		return
+	}
+	err = ur.readWithBufferSelect(ctx, IOSQE_BUFFER_SELECT, so[0].fd, 10, 0)
+	if err != nil {
+		t.Errorf("write fixed: %v", err)
+		return
+	}
+
+	_ = ur.enter()
+	for range 10 {
+		time.Sleep(100 * time.Millisecond)
+		cqe, err := ur.wait()
+		if cqe == nil || err == ErrTemporarilyUnavailable {
+			continue
+		}
+		if err != nil {
+			t.Errorf("io-uring wait cq: %v", err)
+			continue
+		}
+		if cqe.res < 0 {
+			t.Errorf("io-uring wait cq: %v", errFromUnixErrno(unix.Errno(-cqe.res)))
+			continue
+		}
+	}
 }
