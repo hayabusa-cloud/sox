@@ -5,13 +5,13 @@ It can also be used as a tool library for networking, event management,
 message packaging, etc.
 
 ### Basic Concept
-* Low-copy I/O implement for QUIC, TCP, UDP, SCTP and Unix domain sockets  
+* Low-copy I/O implement for TCP, UDP, SCTP and Unix domain sockets  
 * Low kernel-userspace context switch implement for event notifications
 * Compatible with low-lock programming
 
 ### Environment Requirements
-Currently only supporting Linux system  
-Kernel version must be 6.1 or later
+Currently **only** supporting **Linux** system  
+Kernel version must be **6.6** or later
 
 ### License
 ©2022 Hayabusa Cloud Co., Ltd.  
