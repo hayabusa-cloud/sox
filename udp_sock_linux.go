@@ -133,6 +133,17 @@ func (conn *UDPConn) SetReadDeadline(t time.Time) error {
 func (conn *UDPConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
+func (conn *UDPConn) Read(p []byte) (n int, err error) {
+	if conn.raddr == nil {
+		n, _, err = conn.RecvFrom(p)
+		return
+	}
+	n, err = unix.Read(conn.fd, p)
+	if err != nil {
+		return 0, errFromUnixErrno(err)
+	}
+	return n, nil
+}
 func (conn *UDPConn) Write(p []byte) (n int, err error) {
 	return conn.UDPSocket.SendTo(p, conn.raddr)
 }
