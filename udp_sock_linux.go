@@ -16,15 +16,15 @@ type UDPSocket struct {
 	*socket
 }
 
-func newUDPSocket(sa unix.Sockaddr) (*UDPSocket, error) {
+func newUDPSocket(sa Sockaddr) (*UDPSocket, error) {
 	network, fd, err := NetworkType(-1), 0, error(nil)
-	if _, ok := sa.(*unix.SockaddrInet4); ok {
+	if _, ok := sa.(*SockaddrInet4); ok {
 		fd, err = newUDP4Socket()
 		if err != nil {
 			return nil, err
 		}
 		network = NetworkIPv4
-	} else if _, ok = sa.(*unix.SockaddrInet6); ok {
+	} else if _, ok = sa.(*SockaddrInet6); ok {
 		fd, err = newUDP6Socket()
 		if err != nil {
 			return nil, err
@@ -168,10 +168,14 @@ func ListenUDP6(laddr *UDPAddr) (*UDPConn, error) {
 }
 
 func DialUDP4(laddr *UDPAddr, raddr *UDPAddr) (*UDPConn, error) {
+	if laddr == nil {
+		laddr = &UDPAddr{IP: IPv4LoopBack}
+	}
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "udp4", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newUDPSocket(udp4AddrToSockaddr(laddr))
+	lsa := udp4AddrToSockaddr(laddr)
+	so, err := newUDPSocket(lsa)
 	if err != nil {
 		return nil, err
 	}
@@ -179,10 +183,14 @@ func DialUDP4(laddr *UDPAddr, raddr *UDPAddr) (*UDPConn, error) {
 }
 
 func DialUDP6(laddr *UDPAddr, raddr *UDPAddr) (*UDPConn, error) {
+	if laddr == nil {
+		laddr = &UDPAddr{IP: IPv6LoopBack}
+	}
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "udp6", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newUDPSocket(udp6AddrToSockaddr(laddr))
+	lsa := udp6AddrToSockaddr(laddr)
+	so, err := newUDPSocket(lsa)
 	if err != nil {
 		return nil, err
 	}
