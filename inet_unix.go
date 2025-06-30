@@ -28,6 +28,23 @@ func inetAddrFromAddrPort(addrPort netip.AddrPort) Sockaddr {
 	return &SockaddrInet6{}
 }
 
+func ipAddrFromSockaddr(addr Sockaddr) *IPAddr {
+	if addr == nil {
+		return nil
+	}
+	switch addr.(type) {
+	case *SockaddrInet4:
+		a := addr.(*SockaddrInet4)
+		return &IPAddr{IP: a.Addr[:]}
+	case *SockaddrInet6:
+		a := addr.(*SockaddrInet6)
+		return &IPAddr{
+			IP:   a.Addr[:],
+			Zone: ip6ZoneString(int(a.ZoneId)),
+		}
+	}
+	return nil
+}
 func unixAddrFromSockaddr(sa Sockaddr, proto UnderlyingProtocol) *UnixAddr {
 	switch proto {
 	case UnderlyingProtocolStream:

@@ -13,7 +13,6 @@ import (
 )
 
 var (
-
 	// IPV4zero is an IPv4 address representing the zero value (0.0.0.0).
 	IPV4zero = net.IPv4zero
 
@@ -78,13 +77,13 @@ var (
 	// TCPAddrFromAddrPort refers to the net.TCPAddrFromAddrPort function
 	// It returns addr as a [TCPAddr]. If addr.IsValid() is false,
 	// then the returned TCPAddr will contain a nil IP field, indicating an
-	// address family-agnostic unspecified address.
+	// address-family-agnostic unspecified address.
 	TCPAddrFromAddrPort = net.TCPAddrFromAddrPort
 
 	// UDPAddrFromAddrPort refers to the net.UDPAddrFromAddrPort function
 	// It returns addr as a UDPAddr. If addr.IsValid() is false,
 	// then the returned UDPAddr will contain a nil IP field, indicating an
-	// address family-agnostic unspecified address.
+	// address-family-agnostic unspecified address.
 	UDPAddrFromAddrPort = net.UDPAddrFromAddrPort
 )
 
@@ -99,7 +98,7 @@ func SCTPAddrFromAddrPort(addr netip.AddrPort) *SCTPAddr {
 
 var (
 	// ResolveIPAddr refers to the net.ResolveIPAddr function
-	// It returns an address of IP end point.
+	// It returns an address of the IP end point.
 	ResolveIPAddr = net.ResolveIPAddr
 
 	// ResolveTCPAddr refers to the net.ResolveTCPAddr function.
@@ -236,4 +235,14 @@ func ip6ZoneID(zone string) int {
 		panic(err)
 	}
 	return i.Index
+}
+
+func ip6ZoneString(id int) string {
+	if id == 0 {
+		return ""
+	}
+	if i, err := net.InterfaceByIndex(id); err == nil {
+		return i.Name
+	}
+	return ""
 }
