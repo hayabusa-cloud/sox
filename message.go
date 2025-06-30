@@ -37,6 +37,14 @@ var defaultMessageOptions = MessageOptions{
 	Nonblock:       false,
 }
 
+// MessageOptionsRawSocket sets feature options for raw sockets
+var MessageOptionsRawSocket = func(options *MessageOptions) {
+	options.ReadByteOrder = binary.BigEndian
+	options.WriteByteOrder = binary.BigEndian
+	options.ReadProto = UnderlyingProtocolRaw
+	options.WriteProto = UnderlyingProtocolRaw
+}
+
 // MessageOptionsTCPSocket sets feature options for TCP sockets
 var MessageOptionsTCPSocket = func(options *MessageOptions) {
 	options.ReadByteOrder = binary.BigEndian
@@ -94,11 +102,13 @@ func NewMessagePipe(opts ...func(options *MessageOptions)) (reader io.Reader, wr
 type UnderlyingProtocol int
 
 const (
-	// UnderlyingProtocolStream means the underlying protocol works like stream
+	// UnderlyingProtocolStream means the underlying protocol works like a stream
 	UnderlyingProtocolStream UnderlyingProtocol = 1
 	// UnderlyingProtocolDgram means the underlying protocol works like datagram
 	UnderlyingProtocolDgram UnderlyingProtocol = 2
-	// UnderlyingProtocolSeqPacket means the underlying protocol works like sequenced packet
+	// UnderlyingProtocolRaw means the underlying protocol works rawly
+	UnderlyingProtocolRaw UnderlyingProtocol = 3
+	// UnderlyingProtocolSeqPacket means the underlying protocol works like a sequenced packet
 	UnderlyingProtocolSeqPacket UnderlyingProtocol = 5
 )
 
