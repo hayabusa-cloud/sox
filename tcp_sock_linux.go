@@ -16,15 +16,15 @@ type TCPSocket struct {
 	*socket
 }
 
-func newTCPSocket(sa unix.Sockaddr) (*TCPSocket, error) {
+func newTCPSocket(sa Sockaddr) (*TCPSocket, error) {
 	network, fd, err := NetworkType(-1), 0, error(nil)
-	if _, ok := sa.(*unix.SockaddrInet4); ok {
+	if _, ok := sa.(*SockaddrInet4); ok {
 		fd, err = newTCP4Socket()
 		if err != nil {
 			return nil, err
 		}
 		network = NetworkIPv4
-	} else if _, ok = sa.(*unix.SockaddrInet6); ok {
+	} else if _, ok = sa.(*SockaddrInet6); ok {
 		fd, err = newTCP6Socket()
 		if err != nil {
 			return nil, err
@@ -169,10 +169,14 @@ func ListenTCP6(laddr *TCPAddr) (*TCPListener, error) {
 }
 
 func DialTCP4(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
+	if laddr == nil {
+		laddr = &TCPAddr{IP: IPv4LoopBack}
+	}
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "tcp4", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
-	so, err := newTCPSocket(tcp4AddrToSockaddr(laddr))
+	lsa := tcp4AddrToSockaddr(laddr)
+	so, err := newTCPSocket(lsa)
 	if err != nil {
 		return nil, err
 	}
@@ -190,10 +194,14 @@ func DialTCP4(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
 }
 
 func DialTCP6(laddr *TCPAddr, raddr *TCPAddr) (*TCPConn, error) {
-	if raddr == nil {
-		return nil, &OpError{Op: "dial", Net: "udp6", Source: laddr, Addr: nil, Err: errors.New("missing address")}
+	if laddr == nil {
+		laddr = &TCPAddr{IP: IPv6LoopBack}
 	}
-	so, err := newTCPSocket(tcp6AddrToSockaddr(laddr))
+	if raddr == nil {
+		return nil, &OpError{Op: "dial", Net: "tcp6", Source: laddr, Addr: nil, Err: errors.New("missing address")}
+	}
+	lsa := tcp6AddrToSockaddr(laddr)
+	so, err := newTCPSocket(lsa)
 	if err != nil {
 		return nil, err
 	}

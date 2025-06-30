@@ -21,7 +21,7 @@ func newUnixSocket(sa Sockaddr) (*UnixSocket, error) {
 	if _, ok := sa.(*SockaddrUnix); ok {
 		fd, err = unix.Socket(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC, 0)
 		if err != nil {
-			return nil, err
+			return nil, errFromUnixErrno(err)
 		}
 	} else {
 		return nil, UnknownNetworkError("unexpected family")
@@ -148,6 +148,9 @@ func ListenUnix(laddr *UnixAddr) (*UnixListener, error) {
 }
 
 func DialUnix(laddr *UnixAddr, raddr *UnixAddr) (*UnixConn, error) {
+	if laddr == nil {
+		laddr = &UnixAddr{}
+	}
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: "unix", Source: laddr, Addr: nil, Err: errors.New("missing address")}
 	}
