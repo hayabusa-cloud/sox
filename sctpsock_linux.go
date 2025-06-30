@@ -62,6 +62,54 @@ func newSCTPSocket(sa unix.Sockaddr) (*SCTPSocket, error) {
 	return so, nil
 }
 
+// Bind binds addresses to the SCTP socket
+func (so *SCTPSocket) Bind(addr ...*SCTPAddr) error {
+	if len(addr) == 0 {
+		return InvalidAddrError("no addresses provided")
+	}
+
+	var sa unix.Sockaddr
+	if addr[0].IP.To4() != nil {
+		sa = sctp4AddrToSockaddr(addr[0])
+	} else {
+		sa = sctp6AddrToSockaddr(addr[0])
+	}
+
+	err := unix.Bind(so.fd, sa)
+	if err != nil {
+		return errFromUnixErrno(err)
+	}
+
+	// additional addresses
+	for i := 1; i < len(addr); i++ {
+		var addSa unix.Sockaddr
+		if addr[i].IP.To4() != nil {
+			addSa = sctp4AddrToSockaddr(addr[i])
+		} else {
+			addSa = sctp6AddrToSockaddr(addr[i])
+		}
+
+		ptr, n, err := sockaddr(addSa)
+		if err != nil {
+			return err
+		}
+
+		_, _, errno := unix.Syscall6(
+			unix.SYS_SETSOCKOPT,
+			uintptr(so.fd),
+			SOL_SCTP,
+			SCTP_SOCKOPT_BINDX_ADD,
+			uintptr(ptr),
+			uintptr(n),
+			0)
+		if errno != 0 {
+			return errFromUnixErrno(errno)
+		}
+	}
+
+	return nil
+}
+
 func (so *SCTPSocket) Protocol() UnderlyingProtocol {
 	return UnderlyingProtocolSeqPacket
 }
@@ -301,6 +349,9 @@ func sctpConnectx(so *SCTPSocket, sa unix.Sockaddr) error {
 		uintptr(ptr),
 		uintptr(n),
 		0)
+	if errno == 0 {
+		return nil
+	}
 	if errno != unix.EINPROGRESS {
 		return errFromUnixErrno(errno)
 	}
