@@ -5,7 +5,6 @@
 package sox
 
 import (
-	"io"
 	"time"
 )
 
@@ -13,5 +12,10 @@ const jiffy = time.Millisecond
 
 type Timer interface {
 	Now() time.Time
-	io.ReadCloser
+	PollReadCloser
 }
+
+const (
+	DefaultTimerID = 0
+	DefaultTimerHZ = 60
+)
