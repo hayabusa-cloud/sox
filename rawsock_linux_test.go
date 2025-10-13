@@ -7,11 +7,12 @@
 package sox_test
 
 import (
-	"golang.org/x/sys/unix"
-	"hybscloud.com/sox"
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
+	"hybscloud.com/sox"
 )
 
 func TestRawSocket_ReadWrite(t *testing.T) {

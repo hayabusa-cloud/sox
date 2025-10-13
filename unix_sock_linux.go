@@ -8,8 +8,9 @@ package sox
 
 import (
 	"errors"
-	"golang.org/x/sys/unix"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 type UnixSocket struct {
