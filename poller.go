@@ -129,6 +129,12 @@ type PollUintReadWriteCloser interface {
 	io.Closer
 }
 
+type fd int
+
+func (f fd) Fd() int {
+	return int(f)
+}
+
 type file interface {
 	File() (f *os.File, err error)
 }
