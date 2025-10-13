@@ -100,7 +100,6 @@ type Listener = net.Listener
 //
 // Conn is used in various examples and functions in the codebase.
 // Some of the usage examples include:
-// - Accept: accepts a new connection from the listener
 // - NewTCPConn: creates a new TCP connection
 // - NewUDPConn: creates a new UDP connection
 // - NewSCTPConn: creates a new SCTP connection
@@ -150,6 +149,28 @@ func GetFd(x any) int {
 			return -1
 		}
 		return int(f.Fd())
+	}
+	if x, ok := x.(Conn); ok {
+		switch c := x.(type) {
+		case *TCPConn:
+			return c.fd
+		case *UDPConn:
+			return c.fd
+		case *SCTPConn:
+			return c.fd
+		case *UnixConn:
+			return c.fd
+		}
+	}
+	if x, ok := x.(Listener); ok {
+		switch l := (x).(type) {
+		case *TCPListener:
+			return l.fd
+		case *SCTPListener:
+			return l.fd
+		case *UnixListener:
+			return l.fd
+		}
 	}
 
 	return -1
