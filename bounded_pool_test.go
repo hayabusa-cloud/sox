@@ -6,13 +6,14 @@ package sox_test
 
 import (
 	"bytes"
-	"golang.org/x/sys/cpu"
-	"hybscloud.com/sox"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"unsafe"
+
+	"golang.org/x/sys/cpu"
+	"hybscloud.com/sox"
 )
 
 func TestBoundedPool_Block(t *testing.T) {
@@ -294,10 +295,11 @@ func testBoundedPoolBlock[T sox.BoundedPoolItem](t *testing.T, pool *sox.Bounded
 				}
 				if cnt[indirect].Add(1) > 1 {
 					t.Errorf("get same indirect %v simultaneously", indirect)
+					return
 				}
 				runtime.Gosched()
-				err = pool.Put(indirect)
 				cnt[indirect].Add(-1)
+				err = pool.Put(indirect)
 				if err != nil {
 					t.Errorf("put item back to pool: %v", err)
 					return
