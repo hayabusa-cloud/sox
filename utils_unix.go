@@ -7,8 +7,9 @@
 package sox
 
 import (
-	"golang.org/x/sys/unix"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 type ioVec = unix.Iovec
@@ -129,6 +130,15 @@ func ioVecFromGiantBuffers(buffers []GiantBuffer) []ioVec {
 	vec := make([]ioVec, len(buffers))
 	for i := range buffers {
 		vec[i] = ioVec{Base: (*byte)(unsafe.Pointer(&buffers[i])), Len: BufferSizeGiant}
+	}
+
+	return vec
+}
+
+func ioVecFromRegisteredBuffers(buffers []RegisterBuffer) []ioVec {
+	vec := make([]ioVec, len(buffers))
+	for i := range buffers {
+		vec[i] = ioVec{Base: (*byte)(unsafe.Pointer(&buffers[i])), Len: registerBufferSize}
 	}
 
 	return vec
