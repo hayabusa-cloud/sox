@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-// Buffers is alias of net.Buffers
+// Buffers is an alias of net.Buffers
 type Buffers = net.Buffers
 
 var PageSize = uintptr(os.Getpagesize())
@@ -24,8 +24,8 @@ func AlignedMem(size int) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(ptr)), size)
 }
 
-// AlignedMemBlocks returns n bytes slices which
-// has length with memory page size and address
+// AlignedMemBlocks returns n bytes slices that
+// have length with memory page size and address
 // starts from multiple of memory page size
 func AlignedMemBlocks(n int) (blocks [][]byte) {
 	if n < 1 {
@@ -46,7 +46,7 @@ func AlignedMemBlock() []byte {
 	return AlignedMemBlocks(1)[0]
 }
 
-// NewBuffers creates and initializes a new Buffers with given n and size
+// NewBuffers creates and initializes a new Buffers with a given n and size
 func NewBuffers(n int, size int) Buffers {
 	if n < 1 {
 		return Buffers{}
