@@ -9,12 +9,13 @@ package sox
 import (
 	"bytes"
 	"context"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"testing"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestIOUring_BasicUsage(t *testing.T) {
@@ -46,7 +47,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		payload := AlignedMemBlock()
-		err = ur.read(context.TODO(), 0, int(f.Fd()), payload)
+		err = ur.read(context.TODO(), uringOpFlagsNone, uringOpIoprioNone, int(f.Fd()), payload, 0, len(payload))
 		if err != nil {
 			t.Errorf("submission readv: %v", err)
 			return
@@ -106,7 +107,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		s := "test0123456789"
 		payload := AlignedMemBlock()
 		copy(payload, s)
-		err = ur.write(context.TODO(), 0, int(f.Fd()), payload, len(payload))
+		err = ur.write(context.TODO(), uringOpFlagsNone, uringOpIoprioNone, int(f.Fd()), payload, 0, len(payload))
 		if err != nil {
 			t.Errorf("submission write: %v", err)
 			return
@@ -182,7 +183,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		rb := make([]byte, len(wb))
-		err = ur.receive(context.TODO(), 0, 0, so[0].fd, rb)
+		err = ur.receive(context.TODO(), 0, 0, so[0].fd, rb, 0, len(rb))
 		if err != nil {
 			t.Errorf("submit recv: %v", err)
 			return
@@ -240,7 +241,7 @@ func TestIOUring_BasicUsage(t *testing.T) {
 		}
 
 		wb := []byte("test0123456789")
-		err = ur.send(context.TODO(), 0, so[1].fd, wb)
+		err = ur.send(context.TODO(), uringOpFlagsNone, uringOpIoprioNone, so[1].fd, wb, 0, len(wb))
 		if err != nil {
 			t.Errorf("submit send: %v", err)
 			return
@@ -425,7 +426,7 @@ func TestIoUring_BufferSelect(t *testing.T) {
 	}
 	wBuf := [BufferSizeMicro]byte{}
 	copy(wBuf[:], "hello sox!")
-	err = ur.write(ctx, 0, so[1].fd, wBuf[:], 10)
+	err = ur.write(ctx, uringOpFlagsNone, uringOpIoprioNone, so[1].fd, wBuf[:], 0, 10)
 	if err != nil {
 		t.Errorf("write fixed: %v", err)
 		return
@@ -437,6 +438,7 @@ func TestIoUring_BufferSelect(t *testing.T) {
 	}
 
 	_ = ur.enter()
+	cnt := 0
 	for range 10 {
 		time.Sleep(100 * time.Millisecond)
 		cqe, err := ur.wait()
@@ -451,5 +453,23 @@ func TestIoUring_BufferSelect(t *testing.T) {
 			t.Errorf("io-uring wait cq: %v", errFromUnixErrno(unix.Errno(-cqe.res)))
 			continue
 		}
+		urCtx := cqe.context()
+		if urCtx == nil {
+			t.Errorf("operation context is nil")
+			return
+		}
+		if urCtx.op != IORING_OP_PROVIDE_BUFFERS && urCtx.op != IORING_OP_WRITE && urCtx.op != IORING_OP_READ {
+			t.Errorf("expected write or read op but got: %d", urCtx.op)
+			return
+		}
+		if urCtx.op == IORING_OP_READ && cqe.res != 10 {
+			t.Errorf("read %d bytes, expected 10", cqe.res)
+			return
+		}
+		cnt++
+	}
+	if cnt != 3 {
+		t.Errorf("expected 2 operations but got %d", cnt)
+		return
 	}
 }

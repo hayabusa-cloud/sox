@@ -42,7 +42,7 @@ const (
 const (
 	registerBufferNum        = UringEntriesLarge
 	registerBufferSize       = BufferSizeHuge
-	registerBufferDefaultMem = 1 << 24
+	registerBufferDefaultMem = 1 << 23
 )
 
 type (

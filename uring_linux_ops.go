@@ -8,9 +8,10 @@ package sox
 
 import (
 	"context"
-	"golang.org/x/sys/unix"
 	"math"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -69,10 +70,13 @@ const (
 	IORING_OP_FUTEX_WAKE
 	IORING_OP_FUTEX_WAITV
 	IORING_OP_FIXED_FD_INSTALL
+	IORING_OP_FTRUNCATE
+	IORING_OP_BIND
+	IORING_OP_LISTEN
 )
 
-func (ur *ioUring) nop(ctx context.Context, flags uint8, fd int) error {
-	return ur.submit3(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_NOP, flags, 0, fd, 0, 0)
+func (ur *ioUring) nop(ctx context.Context, flags uint8) error {
+	return ur.submit3(ctx, IORING_OP_NOP, flags, 0, 0, 0, 0)
 }
 
 func (ur *ioUring) readv(ctx context.Context, flags uint8, fd int, iov [][]byte) error {
@@ -100,24 +104,24 @@ func (ur *ioUring) fsync(ctx context.Context, flags uint8, fd int) error {
 	return ur.submit3(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FSYNC, flags, 0, fd, 0, 0)
 }
 
-func (ur *ioUring) readFixed(ctx context.Context, flags uint8, fd int, i int) (buf []byte, err error) {
+func (ur *ioUring) readFixed(ctx context.Context, flags uint8, fd int, i int, offset uint64, n int) (buf []byte, err error) {
 	if i < 0 || i >= len(ur.bufs) {
 		return nil, ErrInvalidParam
 	}
 	opcode := IORING_OP_READ_FIXED
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(ur.bufs[i]))))
 
-	return ur.bufs[i], ur.submit9(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, 0, addr, len(ur.bufs[i]), unix.MSG_WAITALL, uint16(i), 0, 0)
+	return ur.bufs[i], ur.submit9(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, offset, addr, n, unix.MSG_WAITALL, uint16(i), 0, 0)
 }
 
-func (ur *ioUring) writeFixed(ctx context.Context, flags uint8, fd int, i int, n int) error {
+func (ur *ioUring) writeFixed(ctx context.Context, flags uint8, fd int, i int, offset uint64, n int) error {
 	if i < 0 || i >= len(ur.bufs) || n < 0 || n > len(ur.bufs[i]) {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_WRITE_FIXED
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(ur.bufs[i]))))
 
-	return ur.submit9(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, 0, addr, n, 0, uint16(i), 0, 0)
+	return ur.submit9(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, offset, addr, n, 0, uint16(i), 0, 0)
 }
 
 func (ur *ioUring) pollAdd(ctx context.Context, flags uint8, fd int, how int, events int) error {
@@ -128,8 +132,8 @@ func (ur *ioUring) pollRemove(ctx context.Context, flags uint8) error {
 	return ur.submit3(ctx, IORING_OP_POLL_REMOVE, flags, 0, 0, 0, 0)
 }
 
-func (ur *ioUring) syncFileRange(ctx context.Context, flags uint8, fd int, off int64, n int, uflags int) error {
-	return ur.submit6(ctx, IORING_OP_SYNC_FILE_RANGE, flags, 0, fd, uint64(off), 0, n, uint32(uflags))
+func (ur *ioUring) syncFileRange(ctx context.Context, flags uint8, fd int, offset uint64, n int, uflags int) error {
+	return ur.submit6(ctx, IORING_OP_SYNC_FILE_RANGE, flags, 0, fd, offset, 0, n, uint32(uflags))
 }
 
 func (ur *ioUring) sendmsg(ctx context.Context, flags uint8, ioprio uint16, fd int, buffers [][]byte, oob []byte, to unix.Sockaddr) error {
@@ -235,8 +239,8 @@ func (ur *ioUring) connect(ctx context.Context, flags uint8, fd int, sa unix.Soc
 	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_CONNECT, flags, 0, fd, uint64(n), uint64(uintptr(ptr)), 0, 0)
 }
 
-func (ur *ioUring) fAllocate(ctx context.Context, flags uint8, fd int, mode uint32, off int64, len int64) error {
-	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FALLOCATE, flags, 0, fd, uint64(off), uint64(len), int(mode), 0)
+func (ur *ioUring) fAllocate(ctx context.Context, flags uint8, fd int, mode uint32, offset uint64, len int64) error {
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FALLOCATE, flags, 0, fd, offset, uint64(len), int(mode), 0)
 }
 
 func (ur *ioUring) openAt(ctx context.Context, flags uint8, dirfd int, pathname string, uflags int, mode uint32) error {
@@ -264,7 +268,7 @@ func (ur *ioUring) statx(ctx context.Context, flags uint8, dirfd int, path strin
 	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(dirfd)), IORING_OP_STATX, flags, 0, dirfd, off, addr, mask, uint32(uflags))
 }
 
-func (ur *ioUring) read(ctx context.Context, flags uint8, fd int, p []byte) error {
+func (ur *ioUring) read(ctx context.Context, flags uint8, ioprio uint16, fd int, p []byte, offset uint64, n int) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
@@ -272,7 +276,7 @@ func (ur *ioUring) read(ctx context.Context, flags uint8, fd int, p []byte) erro
 	opcode := IORING_OP_READ
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
 
-	return ur.submit3(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, addr, len(p))
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, ioprio, fd, offset, addr, n, 0)
 }
 
 func (ur *ioUring) readWithBufferSelect(ctx context.Context, flags uint8, fd int, n int, group uint16) error {
@@ -282,7 +286,7 @@ func (ur *ioUring) readWithBufferSelect(ctx context.Context, flags uint8, fd int
 	return ur.submit9(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, 0, 0, n, 0, group, 0, 0)
 }
 
-func (ur *ioUring) write(ctx context.Context, flags uint8, fd int, p []byte, n int) error {
+func (ur *ioUring) write(ctx context.Context, flags uint8, ioprio uint16, fd int, p []byte, offset uint64, n int) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
@@ -290,11 +294,11 @@ func (ur *ioUring) write(ctx context.Context, flags uint8, fd int, p []byte, n i
 	opcode := IORING_OP_WRITE
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
 
-	return ur.submit3(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, addr, n)
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, ioprio, fd, offset, addr, n, 0)
 }
 
-func (ur *ioUring) fadvise(ctx context.Context, flags uint8, fd int, offset int64, n int, advice int) error {
-	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FADVISE, flags, 0, fd, uint64(offset), 0, n, uint32(advice))
+func (ur *ioUring) fadvise(ctx context.Context, flags uint8, fd int, offset uint64, n int, advice int) error {
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FADVISE, flags, 0, fd, offset, 0, n, uint32(advice))
 }
 
 func (ur *ioUring) madvise(ctx context.Context, flags uint8, b []byte, advice int) error {
@@ -310,24 +314,24 @@ const (
 	IORING_RECVSEND_BUNDLE
 )
 
-func (ur *ioUring) send(ctx context.Context, flags uint8, fd int, p []byte) error {
+func (ur *ioUring) send(ctx context.Context, flags uint8, ioprio uint16, fd int, p []byte, offset uint64, n int) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_SEND
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
 
-	return ur.submit3(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, addr, len(p))
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, offset, addr, n, 0)
 }
 
-func (ur *ioUring) receive(ctx context.Context, flags uint8, ioprio uint16, fd int, p []byte) error {
+func (ur *ioUring) receive(ctx context.Context, flags uint8, ioprio uint16, fd int, p []byte, offset uint64, n int) error {
 	if p == nil || len(p) < 1 {
 		return ErrInvalidParam
 	}
 	opcode := IORING_OP_RECV
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
 
-	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, ioprio, fd, 0, addr, len(p), unix.MSG_WAITALL)
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, ioprio, fd, offset, addr, n, unix.MSG_WAITALL)
 }
 
 func (ur *ioUring) receiveWithBufferSelect(ctx context.Context, flags uint8, ioprio uint16, fd int, n int, group uint16) error {
@@ -471,16 +475,64 @@ func (ur *ioUring) socket(ctx context.Context, flags uint8, domain, typ, proto i
 	return ur.submit9(ctx, IORING_OP_SOCKET, flags, 0, domain, uint64(typ), 0, proto, 0, 0, 0, int(fileIndex))
 }
 
-func (ur *ioUring) sendZeroCopy(ctx context.Context, flags uint8, fd int, p []byte, msgFlags uint32) error {
+func (ur *ioUring) sendZeroCopy(ctx context.Context, flags uint8, fd int, p []byte, offset uint64, n int, msgFlags uint32) error {
 	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
-	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_SEND_ZC, flags, 0, fd, 0, addr, len(p), msgFlags)
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_SEND_ZC, flags, 0, fd, offset, addr, n, msgFlags)
 }
 
-func (ur *ioUring) sendToZeroCopy(ctx context.Context, flags uint8, target Sockaddr, p []byte, msgFlags uint32) error {
-	addr2, addrLen, err := sockaddr(target)
+func (ur *ioUring) sendtoZeroCopy(ctx context.Context, flags uint8, fd int, p []byte, offset uint64, n int, addr Addr, msgFlags uint32) error {
+	dataAddr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
+
+	if addr != nil {
+		saData, _ := sockaddrData(AddrToSockaddr(addr))
+		addr2 := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(saData))))
+
+		return ur.submit9(ctx, IORING_OP_SEND_ZC, flags, 0, fd, addr2, dataAddr, n, msgFlags, 0, 0, 16)
+	}
+
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_SEND_ZC, flags, 0, fd, offset, dataAddr, n, msgFlags)
+}
+
+func (ur *ioUring) sendmsgZeroCopy(ctx context.Context, flags uint8, ioprio uint16, fd int, buffers [][]byte, oob []byte, to unix.Sockaddr, uflags int) error {
+	saPtr, saN, err := unsafe.Pointer(uintptr(0)), 0, error(nil)
+	if to != nil {
+		saPtr, saN, err = sockaddr(to)
+		if err != nil {
+			return err
+		}
+	}
+	opcode := IORING_OP_SENDMSG_ZC
+	addr, n := ioVecFromBytesSlice(buffers)
+	msg := unix.Msghdr{
+		Name:       (*byte)(saPtr),
+		Namelen:    uint32(saN),
+		Iov:        (*unix.Iovec)(unsafe.Pointer(addr)),
+		Iovlen:     uint64(n),
+		Control:    nil,
+		Controllen: 0,
+	}
+	if len(oob) > 0 {
+		msg.Control = &oob[0]
+		msg.Controllen = uint64(len(oob))
+	}
+
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, ioprio, fd, 0, uint64(addr), 1, uint32(uflags))
+}
+
+func (ur *ioUring) fTruncate(ctx context.Context, flags uint8, fd int, length int64) error {
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_FTRUNCATE, flags, 0, fd, uint64(length), 0, 0, 0)
+}
+
+func (ur *ioUring) bind(ctx context.Context, flags uint8, fd int, sa unix.Sockaddr) error {
+	saPtr, saN, err := sockaddr(sa)
 	if err != nil {
 		return err
 	}
-	addr := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(p))))
-	return ur.submit9(ctx, IORING_OP_SEND_ZC, flags, 0, 0, uint64(uintptr(addr2)), addr, len(p), msgFlags, 0, 0, addrLen<<16)
+	opcode := IORING_OP_BIND
+
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), opcode, flags, 0, fd, uint64(saN), uint64(uintptr(saPtr)), 0, 0)
+}
+
+func (ur *ioUring) listen(ctx context.Context, flags uint8, fd int, backlog int) error {
+	return ur.submit6(ContextWithUserdata(ctx, ioUringFd(fd)), IORING_OP_LISTEN, flags, 0, fd, 0, 0, backlog, 0)
 }

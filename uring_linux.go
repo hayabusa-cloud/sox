@@ -8,22 +8,11 @@ package sox
 
 import (
 	"context"
-	"golang.org/x/sys/unix"
 	"sync/atomic"
 	"time"
 	"unsafe"
-)
 
-const (
-	_ = 1 << (iota + 7)
-	_
-	UringEntriesPico
-	UringEntriesNano
-	UringEntriesMicro
-	UringEntriesSmall
-	UringEntriesMedium
-	UringEntriesLarge
-	UringEntriesHuge
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -761,6 +750,7 @@ func ioUringSetup(entries uint32, params *ioUringParams) (fd int, err error) {
 		err = errFromUnixErrno(errno)
 		return
 	}
+	unix.CloseOnExec(int(r1))
 	return int(r1), nil
 }
 
