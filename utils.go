@@ -25,3 +25,8 @@ func Yield(ticks ...int) {
 		time.Sleep(d)
 	}
 }
+
+// MemoryBarrier provides a memory barrier operation to ensure ordering of memory accesses.
+func MemoryBarrier() {
+	memoryBarrier()
+}
