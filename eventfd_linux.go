@@ -23,10 +23,12 @@ func NewEventfd() (PollUintReadWriteCloser, error) {
 	return eventfd(fd), nil
 }
 
+// Fd returns the int eventfd file descriptor
 func (fd eventfd) Fd() int {
 	return int(fd)
 }
 
+// Read reads data from the eventfd into the provided byte slice p
 func (fd eventfd) Read(p []byte) (n int, err error) {
 	n, err = unix.Read(int(fd), p)
 	if err != nil {
@@ -36,6 +38,7 @@ func (fd eventfd) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// ReadUint64 reads an uint64 value from the eventfd
 func (fd eventfd) ReadUint64() (val uint64, err error) {
 	var buf [8]byte
 	_, err = fd.Read(buf[:])
@@ -47,11 +50,13 @@ func (fd eventfd) ReadUint64() (val uint64, err error) {
 	return val, nil
 }
 
+// ReadUint reads an uint value from the eventfd
 func (fd eventfd) ReadUint() (val uint, err error) {
 	u64, err := fd.ReadUint64()
 	return uint(u64), err
 }
 
+// Write writes the given bytes to the eventfd
 func (fd eventfd) Write(p []byte) (n int, err error) {
 	n, err = unix.Write(int(fd), p)
 	if err != nil {
@@ -61,6 +66,7 @@ func (fd eventfd) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// WriteUint64 writes an uint64 value to the eventfd
 func (fd eventfd) WriteUint64(val uint64) error {
 	var buf [8]byte
 	binary.LittleEndian.PutUint64(buf[:], val)
@@ -69,10 +75,12 @@ func (fd eventfd) WriteUint64(val uint64) error {
 	return err
 }
 
+// WriteUint writes an uint value to the eventfd
 func (fd eventfd) WriteUint(val uint) error {
 	return fd.WriteUint64(uint64(val))
 }
 
+// Close closes the eventfd
 func (fd eventfd) Close() error {
 	err := unix.Close(int(fd))
 	if err != nil {
