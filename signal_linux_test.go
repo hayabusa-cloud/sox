@@ -7,8 +7,8 @@
 package sox_test
 
 import (
+	"code.hybscloud.com/sox"
 	"golang.org/x/sys/unix"
-	"hybscloud.com/sox"
 	"os"
 	"testing"
 	"time"

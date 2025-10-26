@@ -6,8 +6,8 @@ package sox_test
 
 import (
 	"bytes"
+	"code.hybscloud.com/sox"
 	"encoding/binary"
-	"hybscloud.com/sox"
 	"io"
 	"testing"
 )

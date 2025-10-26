@@ -8,7 +8,7 @@ package sox_test
 
 import (
 	"bytes"
-	"hybscloud.com/sox"
+	"code.hybscloud.com/sox"
 	"io"
 	"testing"
 )

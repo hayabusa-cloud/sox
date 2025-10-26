@@ -8,9 +8,10 @@ package sox_test
 
 import (
 	"bytes"
-	"hybscloud.com/sox"
 	"io"
 	"testing"
+
+	"code.hybscloud.com/sox"
 )
 
 func TestUnixSocket_ReadWrite(t *testing.T) {

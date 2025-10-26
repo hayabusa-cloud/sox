@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"code.hybscloud.com/sox"
 	"golang.org/x/sys/unix"
-	"hybscloud.com/sox"
 )
 
 func TestRawSocket_ReadWrite(t *testing.T) {

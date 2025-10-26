@@ -1,4 +1,4 @@
-module hybscloud.com/sox
+module code.hybscloud.com/sox
 
 go 1.25
 

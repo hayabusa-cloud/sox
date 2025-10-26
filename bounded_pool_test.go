@@ -12,8 +12,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"code.hybscloud.com/sox"
 	"golang.org/x/sys/cpu"
-	"hybscloud.com/sox"
 )
 
 func TestBoundedPool_Block(t *testing.T) {

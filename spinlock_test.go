@@ -5,8 +5,8 @@
 package sox_test
 
 import (
+	"code.hybscloud.com/sox"
 	"context"
-	"hybscloud.com/sox"
 	"sync"
 	"testing"
 )

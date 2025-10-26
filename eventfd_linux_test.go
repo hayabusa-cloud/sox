@@ -7,7 +7,7 @@
 package sox_test
 
 import (
-	"hybscloud.com/sox"
+	"code.hybscloud.com/sox"
 	"testing"
 )
 
