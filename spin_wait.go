@@ -162,8 +162,10 @@ func (sw *ParamSpinWait) once(level int8) {
 	sw.total++
 	if level <= SpinWaitLevelBlocking {
 		time.Sleep(spinWaitDurationBlocking)
+		return
 	} else if level <= SpinWaitLevelPending {
 		time.Sleep(spinWaitDurationPending)
+		return
 	}
 	runtime.Gosched()
 }
